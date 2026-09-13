@@ -105,21 +105,21 @@ class AppViewModel(
         selectedMonth: YearMonth,
         message: String?
     ): Flow<AppUiState> {
-        val records = combine(
+        val records: Flow<Triple<List<IncomeEntity>, List<ExpenseEntity>, List<InvestmentEntity>>> = combine(
             finance.observeIncome(session.userId),
             finance.observeExpense(session.userId),
             finance.observeInvestments(session.userId)
         ) { incomes, expenses, investments ->
             Triple(incomes, expenses, investments)
         }
-        val extras = combine(
+        val extras: Flow<Triple<List<AutoCaptureEntity>, Int, List<InsightEntity>>> = combine(
             finance.observeQueue(session.userId),
             finance.observeQueueCount(session.userId),
             finance.observeInsights(session.userId)
         ) { queue, queueCount, insights ->
             Triple(queue, queueCount, insights)
         }
-        val settings = combine(
+        val settings: Flow<Triple<List<BudgetEntity>, List<SenderRuleEntity>, List<ImportBatchEntity>>> = combine(
             finance.observeBudgets(session.userId),
             finance.observeSenderRules(session.userId),
             finance.observeImports(session.userId)

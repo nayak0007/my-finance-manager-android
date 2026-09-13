@@ -15,11 +15,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.AccountBalance
-import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Lightbulb
-import androidx.compose.material.icons.outlined.Payments
-import androidx.compose.material.icons.outlined.TrendingUp
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -180,11 +180,11 @@ private fun FinanceRoot(viewModel: AppViewModel) {
                             icon = {
                                 Icon(
                                     imageVector = when (tab) {
-                                        TabDest.Home -> Icons.Outlined.Home
-                                        TabDest.Income -> Icons.Outlined.Payments
-                                        TabDest.Expense -> Icons.Outlined.AccountBalance
-                                        TabDest.Investments -> Icons.Outlined.TrendingUp
-                                        TabDest.Insights -> Icons.Outlined.Lightbulb
+                                        TabDest.Home -> Icons.Filled.Home
+                                        TabDest.Income -> Icons.Filled.Star
+                                        TabDest.Expense -> Icons.Filled.ShoppingCart
+                                        TabDest.Investments -> Icons.Filled.List
+                                        TabDest.Insights -> Icons.Filled.Info
                                     },
                                     contentDescription = tab.label
                                 )

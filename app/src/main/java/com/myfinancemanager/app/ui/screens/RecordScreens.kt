@@ -14,10 +14,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
@@ -79,14 +79,14 @@ fun IncomeListScreen(
             (query.isBlank() || it.source.contains(query, true) || it.notes.contains(query, true))
     }
     Scaffold(
-        floatingActionButton = { FloatingActionButton(onClick = onAdd) { Icon(Icons.Outlined.Add, contentDescription = "Add income") } }
+        floatingActionButton = { FloatingActionButton(onClick = onAdd) { Icon(Icons.Filled.Add, contentDescription = "Add income") } }
     ) { padding ->
         Column(Modifier.padding(padding).padding(horizontal = 16.dp)) {
             Text("Income", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp))
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
-                leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                 placeholder = { Text("Search source") },
                 modifier = Modifier.fillMaxWidth()
             )
@@ -132,7 +132,7 @@ fun ExpenseListScreen(
             (query.isBlank() || it.merchant.contains(query, true) || it.notes.contains(query, true) || it.paymentMode.name.contains(query, true))
     }
     Scaffold(
-        floatingActionButton = { FloatingActionButton(onClick = onAdd) { Icon(Icons.Outlined.Add, contentDescription = "Add expense") } }
+        floatingActionButton = { FloatingActionButton(onClick = onAdd) { Icon(Icons.Filled.Add, contentDescription = "Add expense") } }
     ) { padding ->
         Column(Modifier.padding(padding).padding(horizontal = 16.dp)) {
             Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -142,7 +142,7 @@ fun ExpenseListScreen(
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
-                leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                 placeholder = { Text("Search merchant, mode") },
                 modifier = Modifier.fillMaxWidth()
             )
@@ -184,7 +184,7 @@ fun InvestmentListScreen(
     val gain = current - invested
     val byType = items.groupBy { it.type }.map { it.key.name.titleCase() to it.value.sumOf { v -> v.currentValue } }
     Scaffold(
-        floatingActionButton = { FloatingActionButton(onClick = onAdd) { Icon(Icons.Outlined.Add, contentDescription = "Add investment") } }
+        floatingActionButton = { FloatingActionButton(onClick = onAdd) { Icon(Icons.Filled.Add, contentDescription = "Add investment") } }
     ) { padding ->
         Column(Modifier.padding(padding).padding(horizontal = 16.dp)) {
             Text("Investments", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp))
@@ -383,11 +383,11 @@ private fun FormScaffold(title: String, onBack: () -> Unit, onDelete: (() -> Uni
             TopAppBar(
                 title = { Text(title) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back") }
+                    IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "Back") }
                 },
                 actions = {
                     if (onDelete != null) {
-                        IconButton(onClick = onDelete) { Icon(Icons.Outlined.Delete, contentDescription = "Delete") }
+                        IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, contentDescription = "Delete") }
                     }
                 }
             )

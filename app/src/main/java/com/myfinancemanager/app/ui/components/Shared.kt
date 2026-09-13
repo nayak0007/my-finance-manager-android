@@ -18,10 +18,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -100,7 +98,6 @@ fun MoneyField(value: String, onValueChange: (String) -> Unit, label: String = "
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun <T> EnumDropdown(
     label: String,
@@ -110,16 +107,15 @@ fun <T> EnumDropdown(
     labelOf: (T) -> String = { it.toString().titleCase() }
 ) {
     var expanded by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+    Box(Modifier.fillMaxWidth()) {
         OutlinedTextField(
             value = labelOf(selected),
             onValueChange = {},
             readOnly = true,
             label = { Text(label) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-            modifier = Modifier.fillMaxWidth().menuAnchor()
+            modifier = Modifier.fillMaxWidth().clickable { expanded = true }
         )
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             options.forEach { option ->
                 DropdownMenuItem(
                     text = { Text(labelOf(option)) },
@@ -156,7 +152,7 @@ fun BudgetBar(spent: Double, limit: Double, currency: String, category: String) 
         }
         Spacer(Modifier.height(6.dp))
         LinearProgressIndicator(
-            progress = { ratio.coerceAtMost(1f) },
+            progress = ratio.coerceAtMost(1f),
             modifier = Modifier.fillMaxWidth().height(8.dp),
             color = if (over) ExpenseRed else IncomeGreen
         )

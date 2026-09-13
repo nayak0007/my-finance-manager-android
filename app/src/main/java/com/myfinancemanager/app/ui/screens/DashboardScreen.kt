@@ -12,11 +12,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ChevronLeft
-import androidx.compose.material.icons.outlined.ChevronRight
-import androidx.compose.material.icons.outlined.FileUpload
-import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -70,20 +70,20 @@ fun DashboardScreen(
         TopAppBar(
             title = { Text("Hello, ${state.session?.displayName.orEmpty().ifBlank { "there" }}") },
             actions = {
-                IconButton(onClick = onImport) { Icon(Icons.Outlined.FileUpload, contentDescription = "Import") }
+                IconButton(onClick = onImport) { Icon(Icons.Filled.Add, contentDescription = "Import") }
                 IconButton(onClick = onQueue) {
                     BadgedBox(badge = { if (state.queueCount > 0) Badge { Text("${state.queueCount}") } }) {
-                        Icon(Icons.Outlined.Notifications, contentDescription = "Review queue")
+                        Icon(Icons.Filled.Notifications, contentDescription = "Review queue")
                     }
                 }
-                IconButton(onClick = onSettings) { Icon(Icons.Outlined.Settings, contentDescription = "Settings") }
+                IconButton(onClick = onSettings) { Icon(Icons.Filled.Settings, contentDescription = "Settings") }
             }
         )
         Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onPrevMonth) { Icon(Icons.Outlined.ChevronLeft, contentDescription = "Previous") }
+                IconButton(onClick = onPrevMonth) { Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = "Previous") }
                 Text(Dates.formatMonth(dash.month), fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                IconButton(onClick = onNextMonth) { Icon(Icons.Outlined.ChevronRight, contentDescription = "Next") }
+                IconButton(onClick = onNextMonth) { Icon(Icons.Filled.KeyboardArrowRight, contentDescription = "Next") }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 SummaryCard("Income", dash.income, currency, IncomeGreen, Modifier.weight(1f))

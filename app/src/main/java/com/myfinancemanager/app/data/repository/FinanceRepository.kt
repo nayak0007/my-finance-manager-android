@@ -42,9 +42,12 @@ class FinanceRepository(
     private val budgetDao: BudgetDao,
     private val senderRuleDao: SenderRuleDao
 ) {
-    fun observeIncome(userId: String): Flow<List<IncomeEntity>> = incomeDao.observe(userId)
-    fun observeExpense(userId: String): Flow<List<ExpenseEntity>> = expenseDao.observe(userId)
-    fun observeInvestments(userId: String): Flow<List<InvestmentEntity>> = investmentDao.observe(userId)
+    fun observeIncome(userId: String): Flow<List<IncomeEntity>> =
+        incomeDao.observe(userId, RecordStatus.CONFIRMED)
+    fun observeExpense(userId: String): Flow<List<ExpenseEntity>> =
+        expenseDao.observe(userId, RecordStatus.CONFIRMED)
+    fun observeInvestments(userId: String): Flow<List<InvestmentEntity>> =
+        investmentDao.observe(userId, RecordStatus.CONFIRMED)
     fun observeQueue(userId: String): Flow<List<AutoCaptureEntity>> =
         autoCaptureDao.observeByStatus(userId, AutoCaptureStatus.PENDING)
     fun observeQueueCount(userId: String): Flow<Int> =
@@ -321,9 +324,9 @@ class FinanceRepository(
     suspend fun deleteSenderRule(id: String) = senderRuleDao.delete(id)
 
     suspend fun refreshInsights(userId: String, currency: String) {
-        val incomes = incomeDao.observe(userId).first()
-        val expenses = expenseDao.observe(userId).first()
-        val investments = investmentDao.observe(userId).first()
+        val incomes = incomeDao.observe(userId, RecordStatus.CONFIRMED).first()
+        val expenses = expenseDao.observe(userId, RecordStatus.CONFIRMED).first()
+        val investments = investmentDao.observe(userId, RecordStatus.CONFIRMED).first()
         insightDao.deleteForUser(userId)
         insightDao.insertAll(InsightEngine.generate(userId, incomes, expenses, investments, currency))
     }
@@ -342,9 +345,9 @@ class FinanceRepository(
     }
 
     suspend fun exportCsv(userId: String): String {
-        val incomes = incomeDao.observe(userId).first()
-        val expenses = expenseDao.observe(userId).first()
-        val investments = investmentDao.observe(userId).first()
+        val incomes = incomeDao.observe(userId, RecordStatus.CONFIRMED).first()
+        val expenses = expenseDao.observe(userId, RecordStatus.CONFIRMED).first()
+        val investments = investmentDao.observe(userId, RecordStatus.CONFIRMED).first()
         val sb = StringBuilder()
         sb.appendLine("type,date,party,category,amount,origin,notes")
         incomes.forEach {

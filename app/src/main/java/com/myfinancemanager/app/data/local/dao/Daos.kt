@@ -37,10 +37,10 @@ interface UserDao {
 @Dao
 interface IncomeDao {
     @Query("SELECT * FROM income_records WHERE userId = :userId AND status = :status ORDER BY date DESC")
-    fun observe(userId: String, status: RecordStatus = RecordStatus.CONFIRMED): Flow<List<IncomeEntity>>
+    fun observe(userId: String, status: RecordStatus): Flow<List<IncomeEntity>>
 
     @Query("SELECT * FROM income_records WHERE userId = :userId AND status = :status AND date BETWEEN :from AND :to ORDER BY date DESC")
-    fun observeInRange(userId: String, from: Long, to: Long, status: RecordStatus = RecordStatus.CONFIRMED): Flow<List<IncomeEntity>>
+    fun observeInRange(userId: String, from: Long, to: Long, status: RecordStatus): Flow<List<IncomeEntity>>
 
     @Query("SELECT * FROM income_records WHERE id = :id LIMIT 1")
     suspend fun getById(id: String): IncomeEntity?
@@ -64,10 +64,10 @@ interface IncomeDao {
 @Dao
 interface ExpenseDao {
     @Query("SELECT * FROM expense_records WHERE userId = :userId AND status = :status ORDER BY date DESC")
-    fun observe(userId: String, status: RecordStatus = RecordStatus.CONFIRMED): Flow<List<ExpenseEntity>>
+    fun observe(userId: String, status: RecordStatus): Flow<List<ExpenseEntity>>
 
     @Query("SELECT * FROM expense_records WHERE userId = :userId AND status = :status AND date BETWEEN :from AND :to ORDER BY date DESC")
-    fun observeInRange(userId: String, from: Long, to: Long, status: RecordStatus = RecordStatus.CONFIRMED): Flow<List<ExpenseEntity>>
+    fun observeInRange(userId: String, from: Long, to: Long, status: RecordStatus): Flow<List<ExpenseEntity>>
 
     @Query("SELECT * FROM expense_records WHERE id = :id LIMIT 1")
     suspend fun getById(id: String): ExpenseEntity?
@@ -91,7 +91,7 @@ interface ExpenseDao {
 @Dao
 interface InvestmentDao {
     @Query("SELECT * FROM investment_records WHERE userId = :userId AND status = :status ORDER BY date DESC")
-    fun observe(userId: String, status: RecordStatus = RecordStatus.CONFIRMED): Flow<List<InvestmentEntity>>
+    fun observe(userId: String, status: RecordStatus): Flow<List<InvestmentEntity>>
 
     @Query("SELECT * FROM investment_records WHERE id = :id LIMIT 1")
     suspend fun getById(id: String): InvestmentEntity?

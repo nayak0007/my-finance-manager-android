@@ -16,7 +16,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
@@ -54,7 +54,6 @@ import com.myfinancemanager.app.data.local.entity.ExpenseCategory
 import com.myfinancemanager.app.data.local.entity.ExpenseEntity
 import com.myfinancemanager.app.data.local.entity.ImportBatchEntity
 import com.myfinancemanager.app.data.local.entity.InsightEntity
-import com.myfinancemanager.app.data.local.entity.ParsedType
 import com.myfinancemanager.app.data.local.entity.SenderRuleEntity
 import com.myfinancemanager.app.data.parser.ParsedTransaction
 import com.myfinancemanager.app.data.prefs.AppPreferences
@@ -106,7 +105,7 @@ fun ImportScreen(
     }
     Scaffold(topBar = {
         TopAppBar(title = { Text("Smart Import") }, navigationIcon = {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back") }
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "Back") }
         })
     }) { padding ->
         Column(Modifier.padding(padding).padding(16.dp)) {
@@ -187,7 +186,7 @@ fun QueueScreen(
 ) {
     Scaffold(topBar = {
         TopAppBar(title = { Text("Review queue") }, navigationIcon = {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back") }
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "Back") }
         }, actions = {
             TextButton(onClick = onScanInbox) { Text("Scan SMS") }
         })
@@ -265,7 +264,7 @@ fun SettingsScreen(
     var display by remember { mutableStateOf(email.substringBefore("@")) }
     Scaffold(topBar = {
         TopAppBar(title = { Text("Settings") }, navigationIcon = {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back") }
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "Back") }
         })
     }) { padding ->
         Column(Modifier.padding(padding).padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -328,7 +327,7 @@ fun BudgetScreen(
     }.groupBy { it.category }.mapValues { it.value.sumOf { e -> e.amount } }
     Scaffold(topBar = {
         TopAppBar(title = { Text("Category budgets") }, navigationIcon = {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back") }
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "Back") }
         })
     }) { padding ->
         Column(Modifier.padding(padding).padding(16.dp)) {
@@ -363,7 +362,7 @@ fun SenderScreen(
     var allowed by remember { mutableStateOf(true) }
     Scaffold(topBar = {
         TopAppBar(title = { Text("SMS senders") }, navigationIcon = {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back") }
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "Back") }
         })
     }) { padding ->
         Column(Modifier.padding(padding).padding(16.dp)) {
