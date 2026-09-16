@@ -1,0 +1,2 @@
+-keepattributes Signature
+-keep class com.myfinancemanager.app.data.remote.** { *; }

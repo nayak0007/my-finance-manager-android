@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">My Finance Manager</string>
+    <string name="sms_permission_rationale">SMS access is used only to detect bank and UPI transaction alerts so they can be reviewed before saving. Nothing is shared or sold.</string>
+    <string name="ai_disclaimer">Suggestions are informational only and are not certified financial, tax, or investment advice.</string>
+</resources>
