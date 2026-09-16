@@ -205,10 +205,16 @@ private fun FinanceRoot(viewModel: AppViewModel) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             }
             composable(Routes.Login) {
-                LoginScreen(viewModel, state.message) { nav.navigate(Routes.Signup) }
+                LoginScreen(viewModel, state.authBusy, state.authError) {
+                    viewModel.clearAuthError()
+                    nav.navigate(Routes.Signup)
+                }
             }
             composable(Routes.Signup) {
-                SignupScreen(viewModel, state.message) { nav.popBackStack() }
+                SignupScreen(viewModel, state.authBusy, state.authError) {
+                    viewModel.clearAuthError()
+                    nav.popBackStack()
+                }
             }
             composable(Routes.Onboarding) {
                 OnboardingScreen { sms, notify ->
@@ -333,6 +339,7 @@ private fun FinanceRoot(viewModel: AppViewModel) {
                 SettingsScreen(
                     prefs = state.prefs,
                     email = state.session?.email.orEmpty(),
+                    sync = state.sync,
                     viewModel = viewModel,
                     onBack = { nav.popBackStack() },
                     onSenders = { nav.navigate(Routes.Senders) },

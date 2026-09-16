@@ -87,7 +87,7 @@ fun EmptyState(title: String, body: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun MoneyField(value: String, onValueChange: (String) -> Unit, label: String = "Amount") {
+fun MoneyField(value: String, label: String = "Amount", onValueChange: (String) -> Unit) {
     OutlinedTextField(
         value = value,
         onValueChange = { raw -> onValueChange(raw.filter { it.isDigit() || it == '.' }) },
@@ -103,8 +103,8 @@ fun <T> EnumDropdown(
     label: String,
     selected: T,
     options: List<T>,
-    onSelected: (T) -> Unit,
-    labelOf: (T) -> String = { it.toString().titleCase() }
+    labelOf: (T) -> String = { it.toString().titleCase() },
+    onSelected: (T) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxWidth()) {

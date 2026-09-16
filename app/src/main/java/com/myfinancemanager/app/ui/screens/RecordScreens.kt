@@ -282,8 +282,8 @@ fun AddInvestmentScreen(onBack: () -> Unit, onSave: (String, InvestmentType, Dou
     FormScaffold("Add investment", onBack) {
         OutlinedTextField(name, { name = it }, label = { Text("Instrument name") }, modifier = Modifier.fillMaxWidth())
         EnumDropdown("Type", type, InvestmentType.entries.toList()) { type = it }
-        MoneyField(invested, { invested = it }, "Amount invested")
-        MoneyField(current, { current = it }, "Current value")
+        MoneyField(invested, "Amount invested") { invested = it }
+        MoneyField(current, "Current value") { current = it }
         OutlinedTextField(broker, { broker = it }, label = { Text("Broker / platform") }, modifier = Modifier.fillMaxWidth())
         DateField(date) { date = it }
         OutlinedTextField(notes, { notes = it }, label = { Text("Notes") }, modifier = Modifier.fillMaxWidth())
@@ -363,8 +363,8 @@ fun InvestmentDetailScreen(item: InvestmentEntity?, currency: String, onBack: ()
         OriginChip(item.origin.name, item.origin != RecordOrigin.MANUAL)
         OutlinedTextField(name, { name = it }, label = { Text("Name") }, modifier = Modifier.fillMaxWidth())
         EnumDropdown("Type", type, InvestmentType.entries.toList()) { type = it }
-        MoneyField(invested, { invested = it }, "Amount invested")
-        MoneyField(current, { current = it }, "Current value")
+        MoneyField(invested, "Amount invested") { invested = it }
+        MoneyField(current, "Current value") { current = it }
         OutlinedTextField(broker, { broker = it }, label = { Text("Broker") }, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(notes, { notes = it }, label = { Text("Notes") }, modifier = Modifier.fillMaxWidth())
         Button(onClick = {

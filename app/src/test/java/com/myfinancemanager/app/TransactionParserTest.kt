@@ -1,21 +1,16 @@
 package com.myfinancemanager.app
 
-import com.myfinancemanager.app.data.insights.InsightEngine
 import com.myfinancemanager.app.data.local.entity.ExpenseCategory
-import com.myfinancemanager.app.data.local.entity.ExpenseEntity
 import com.myfinancemanager.app.data.local.entity.IncomeCategory
-import com.myfinancemanager.app.data.local.entity.IncomeEntity
 import com.myfinancemanager.app.data.local.entity.ParsedType
 import com.myfinancemanager.app.data.local.entity.PaymentMode
-import com.myfinancemanager.app.data.local.entity.RecordOrigin
-import com.myfinancemanager.app.data.local.entity.RecordStatus
+import com.myfinancemanager.app.data.local.entity.budgetIdFor
 import com.myfinancemanager.app.data.parser.TransactionParser
-import com.myfinancemanager.app.util.Dates
 import com.myfinancemanager.app.util.Ids
 import com.myfinancemanager.app.util.Money
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TransactionParserTest {
@@ -69,16 +64,11 @@ class TransactionParserTest {
     }
 
     @Test
-    fun insightEngineProducesSavingsTip() {
-        val now = Dates.now()
-        val incomes = listOf(
-            IncomeEntity("1", "u", 100000.0, "Job", IncomeCategory.SALARY, now, RecordOrigin.MANUAL, "", false, RecordStatus.CONFIRMED, "a", now, now)
-        )
-        val expenses = listOf(
-            ExpenseEntity("2", "u", 40000.0, "Swiggy", ExpenseCategory.FOOD, PaymentMode.UPI, now, RecordOrigin.MANUAL, "", false, RecordStatus.CONFIRMED, "b", now, now)
-        )
-        val insights = InsightEngine.generate("u", incomes, expenses, emptyList(), "INR")
-        assertTrue(insights.isNotEmpty())
-        assertTrue(insights.any { it.category == "savings" })
+    fun budgetIdIsDerivedFromUserAndCategory() {
+        // The account keys budgets on (user, category), so the local row id has to be derivable
+        // from the same pair for a push and a pull to meet on one row.
+        assertEquals(budgetIdFor("u1", ExpenseCategory.FOOD), budgetIdFor("u1", ExpenseCategory.FOOD))
+        assertNotEquals(budgetIdFor("u1", ExpenseCategory.FOOD), budgetIdFor("u2", ExpenseCategory.FOOD))
+        assertNotEquals(budgetIdFor("u1", ExpenseCategory.FOOD), budgetIdFor("u1", ExpenseCategory.TRAVEL))
     }
 }

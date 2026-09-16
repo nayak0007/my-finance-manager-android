@@ -42,6 +42,7 @@ object Dates {
     private val dayFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("dd MMM yyyy")
     private val monthFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("MMM yyyy")
     private val shortFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("dd MMM")
+    private val dateTimeFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm")
 
     fun now(): Long = System.currentTimeMillis()
 
@@ -64,6 +65,10 @@ object Dates {
     fun format(epoch: Long): String = toLocalDate(epoch).format(dayFmt)
     fun formatShort(epoch: Long): String = toLocalDate(epoch).format(shortFmt)
     fun formatMonth(yearMonth: YearMonth): String = yearMonth.format(monthFmt)
+
+    /** Date and wall-clock time, used for "last synced" readouts. */
+    fun formatDateTime(epoch: Long): String =
+        Instant.ofEpochMilli(epoch).atZone(zone).format(dateTimeFmt)
 
     fun monthsBack(count: Int): List<YearMonth> {
         val now = YearMonth.now()

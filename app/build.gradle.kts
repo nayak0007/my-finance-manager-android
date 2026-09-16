@@ -13,8 +13,8 @@ android {
         applicationId = "com.myfinancemanager.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 5
+        versionName = "1.3.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }
@@ -26,10 +26,27 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Deployed Render API. Must end with a trailing slash.
+            buildConfigField("String", "API_BASE_URL", "\"https://my-finance-manager-backend-ah25.onrender.com/\"")
+            // Neon Auth (Managed Better Auth). Sign-up, sign-in and JWT minting happen here;
+            // the JWT is then presented to API_BASE_URL. Note the /<database>/auth suffix and
+            // the trailing slash Retrofit requires.
+            buildConfigField(
+                "String",
+                "NEON_AUTH_URL",
+                "\"https://ep-delicate-mud-b3ht2w29.neonauth.c-4.ap-southeast-1.aws.neon.tech/neondb/auth/\""
+            )
         }
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
+            // Same endpoints as release: this app has no separate staging backend.
+            buildConfigField("String", "API_BASE_URL", "\"https://my-finance-manager-backend-ah25.onrender.com/\"")
+            buildConfigField(
+                "String",
+                "NEON_AUTH_URL",
+                "\"https://ep-delicate-mud-b3ht2w29.neonauth.c-4.ap-southeast-1.aws.neon.tech/neondb/auth/\""
+            )
         }
     }
 

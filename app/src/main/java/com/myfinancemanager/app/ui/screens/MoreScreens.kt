@@ -17,6 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
@@ -48,6 +49,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.myfinancemanager.app.MyFinanceApp
+import com.myfinancemanager.app.data.local.StatementSource
 import com.myfinancemanager.app.data.local.entity.AutoCaptureEntity
 import com.myfinancemanager.app.data.local.entity.BudgetEntity
 import com.myfinancemanager.app.data.local.entity.ExpenseCategory
@@ -57,8 +59,11 @@ import com.myfinancemanager.app.data.local.entity.InsightEntity
 import com.myfinancemanager.app.data.local.entity.SenderRuleEntity
 import com.myfinancemanager.app.data.parser.ParsedTransaction
 import com.myfinancemanager.app.data.prefs.AppPreferences
+import com.myfinancemanager.app.data.remote.ApiConfig
+import com.myfinancemanager.app.data.remote.NeonAuthConfig
 import com.myfinancemanager.app.sms.InboxScanner
 import com.myfinancemanager.app.ui.AppViewModel
+import com.myfinancemanager.app.ui.SyncSnapshot
 import com.myfinancemanager.app.ui.components.BudgetBar
 import com.myfinancemanager.app.ui.components.EmptyState
 import com.myfinancemanager.app.ui.components.EnumDropdown
@@ -81,7 +86,7 @@ fun ImportScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var fileName by remember { mutableStateOf<String?>(null) }
+    var source by remember { mutableStateOf<StatementSource?>(null) }
     var parsed by remember { mutableStateOf<List<ParsedTransaction>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     val excluded = remember { mutableStateMapOf<Int, Boolean>() }
@@ -89,7 +94,7 @@ fun ImportScreen(
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
         val name = uri.lastPathSegment?.substringAfterLast('/') ?: "statement"
-        fileName = name
+        source = StatementSource.Picked(uri, name)
         loading = true
         scope.launch {
             val rows = withContext(Dispatchers.IO) {
@@ -124,7 +129,7 @@ fun ImportScreen(
                         val rows = withContext(Dispatchers.IO) {
                             MyFinanceApp.instance.container.statementImporter.parseContent(text, "sample_statement.csv")
                         }
-                        fileName = "sample_statement.csv"
+                        source = StatementSource.Inline("sample_statement.csv", text)
                         parsed = rows
                         rows.forEachIndexed { index, tx ->
                             duplicates[index] = viewModel.isDuplicate(tx)
@@ -140,7 +145,7 @@ fun ImportScreen(
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 Text("Parsing file…")
             }
-            fileName?.let { Text("File: $it", modifier = Modifier.padding(top = 8.dp)) }
+            source?.fileName?.let { Text("File: $it", modifier = Modifier.padding(top = 8.dp)) }
             if (parsed.isNotEmpty()) {
                 Text("${parsed.size} rows parsed. Uncheck duplicates or junk before commit.", modifier = Modifier.padding(vertical = 8.dp))
                 LazyColumn(modifier = Modifier.height(320.dp)) {
@@ -161,8 +166,9 @@ fun ImportScreen(
                 Button(
                     onClick = {
                         val selected = parsed.filterIndexed { i, _ -> excluded[i] != true }
-                        viewModel.commitImport(fileName ?: "statement", selected) { onBack() }
+                        source?.let { viewModel.commitImport(it, selected) { onBack() } }
                     },
+                    enabled = source != null,
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Confirm import") }
             }
@@ -224,7 +230,7 @@ fun InsightsScreen(
     Column(Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
         Text("Insights", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Text(
-            "Suggestions are informational only and are not certified financial, tax, or investment advice.",
+            "Suggestions are generated from your account and are informational only — not certified financial, tax, or investment advice.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
         )
@@ -238,6 +244,7 @@ fun InsightsScreen(
                 Card(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
                     Column(Modifier.padding(16.dp)) {
                         Text(item.category.titleCase(), style = MaterialTheme.typography.labelMedium)
+                        item.title?.let { Text(it, fontWeight = FontWeight.SemiBold) }
                         Text(item.insightText, modifier = Modifier.padding(vertical = 8.dp))
                         Row {
                             TextButton(onClick = { onSave(item) }) { Text(if (item.saved) "Saved" else "Save") }
@@ -255,6 +262,7 @@ fun InsightsScreen(
 fun SettingsScreen(
     prefs: AppPreferences,
     email: String,
+    sync: SyncSnapshot,
     viewModel: AppViewModel,
     onBack: () -> Unit,
     onSenders: () -> Unit,
@@ -262,6 +270,7 @@ fun SettingsScreen(
     onExport: () -> Unit
 ) {
     var display by remember { mutableStateOf(email.substringBefore("@")) }
+    var deletePrompt by remember { mutableStateOf(false) }
     Scaffold(topBar = {
         TopAppBar(title = { Text("Settings") }, navigationIcon = {
             IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "Back") }
@@ -277,7 +286,10 @@ fun SettingsScreen(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("SMS auto-capture")
-                    Text("Reads bank alerts on device only.", style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        "Bank alerts are read on this device, then queued here for review.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
                 Switch(checked = prefs.smsCaptureEnabled, onCheckedChange = {
                     if (it) onRequestSms() else viewModel.setSmsEnabled(false)
@@ -299,13 +311,70 @@ fun SettingsScreen(
             EnumDropdown("Insight frequency (days)", prefs.insightFrequencyDays, listOf(1, 3, 7, 14, 30)) {
                 viewModel.setInsightFrequency(it)
             }
+            SectionTitle("Sync")
+            Text(
+                "Income, expenses and investments are stored in your account, so they survive a reinstall and stay in step with any other device you sign in on. Your SMS review queue is mirrored there too, and confirming an alert asks the backend to record the transaction, so a confirm taken offline is applied as soon as your phone is back online.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            )
+            sync.error?.let {
+                Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+            Text(
+                sync.lastAt?.let { "Last synced ${Dates.formatDateTime(it)}" } ?: "Not synced yet",
+                style = MaterialTheme.typography.bodySmall
+            )
+            // Shown so there is no doubt about where things go. These are two different services:
+            // the account is held by Neon Auth, while every financial record is held by the API.
+            Text(
+                "Account sign-in: ${NeonAuthConfig.BASE_URL}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            )
+            Text(
+                "Data server: ${ApiConfig.BASE_URL}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            )
+            OutlinedButton(
+                onClick = { viewModel.syncNow() },
+                enabled = !sync.running,
+                modifier = Modifier.fillMaxWidth()
+            ) { Text(if (sync.running) "Syncing…" else "Sync now") }
             SectionTitle("Data")
             OutlinedButton(onClick = onExport, modifier = Modifier.fillMaxWidth()) { Text("Export CSV") }
             OutlinedButton(onClick = { viewModel.logout() }, modifier = Modifier.fillMaxWidth()) { Text("Log out") }
-            TextButton(onClick = { viewModel.deleteAccount() }) {
+            TextButton(onClick = { deletePrompt = true }) {
                 Text("Delete account", color = MaterialTheme.colorScheme.error)
             }
         }
+    }
+
+    if (deletePrompt) {
+        AlertDialog(
+            onDismissRequest = { deletePrompt = false },
+            title = { Text("Delete account?") },
+            text = {
+                Text(
+                    "This permanently deletes every record the server holds for this account, " +
+                        "then clears this device. It cannot be undone.\n\n" +
+                        "The sign-in itself (email and password) is held by Neon Auth, which does " +
+                        "not expose account deletion to apps. Remove the user on the Auth page in " +
+                        "the Neon Console if you want that gone as well."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteAccount()
+                        deletePrompt = false
+                    }
+                ) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { deletePrompt = false }) { Text("Cancel") }
+            }
+        )
     }
 }
 
@@ -333,7 +402,7 @@ fun BudgetScreen(
         Column(Modifier.padding(padding).padding(16.dp)) {
             EnumDropdown("Category", category, ExpenseCategory.entries.toList()) { category = it }
             Spacer(Modifier.height(8.dp))
-            MoneyField(amount, { amount = it }, "Monthly limit")
+            MoneyField(amount, "Monthly limit") { amount = it }
             Spacer(Modifier.height(8.dp))
             Button(onClick = { amount.toDoubleOrNull()?.let { onSave(category, it) } }, modifier = Modifier.fillMaxWidth()) {
                 Text("Save budget")

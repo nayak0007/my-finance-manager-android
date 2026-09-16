@@ -1,6 +1,5 @@
 package com.myfinancemanager.app.data.repository
 
-import com.myfinancemanager.app.data.insights.InsightEngine
 import com.myfinancemanager.app.data.local.dao.AutoCaptureDao
 import com.myfinancemanager.app.data.local.dao.BudgetDao
 import com.myfinancemanager.app.data.local.dao.ExpenseDao
@@ -9,6 +8,8 @@ import com.myfinancemanager.app.data.local.dao.IncomeDao
 import com.myfinancemanager.app.data.local.dao.InsightDao
 import com.myfinancemanager.app.data.local.dao.InvestmentDao
 import com.myfinancemanager.app.data.local.dao.SenderRuleDao
+import com.myfinancemanager.app.data.local.dao.SyncDao
+import com.myfinancemanager.app.data.local.StoredStatement
 import com.myfinancemanager.app.data.local.entity.AutoCaptureEntity
 import com.myfinancemanager.app.data.local.entity.AutoCaptureStatus
 import com.myfinancemanager.app.data.local.entity.BudgetEntity
@@ -25,7 +26,11 @@ import com.myfinancemanager.app.data.local.entity.PaymentMode
 import com.myfinancemanager.app.data.local.entity.RecordOrigin
 import com.myfinancemanager.app.data.local.entity.RecordStatus
 import com.myfinancemanager.app.data.local.entity.SenderRuleEntity
+import com.myfinancemanager.app.data.local.entity.SyncKind
+import com.myfinancemanager.app.data.local.entity.SyncTombstoneEntity
+import com.myfinancemanager.app.data.local.entity.budgetIdFor
 import com.myfinancemanager.app.data.parser.ParsedTransaction
+import com.myfinancemanager.app.data.prefs.UserPreferences
 import com.myfinancemanager.app.util.Dates
 import com.myfinancemanager.app.util.Ids
 import kotlinx.coroutines.flow.Flow
@@ -40,7 +45,9 @@ class FinanceRepository(
     private val importBatchDao: ImportBatchDao,
     private val insightDao: InsightDao,
     private val budgetDao: BudgetDao,
-    private val senderRuleDao: SenderRuleDao
+    private val senderRuleDao: SenderRuleDao,
+    private val syncDao: SyncDao,
+    private val preferences: UserPreferences
 ) {
     fun observeIncome(userId: String): Flow<List<IncomeEntity>> =
         incomeDao.observe(userId, RecordStatus.CONFIRMED)
@@ -94,10 +101,14 @@ class FinanceRepository(
     }
 
     suspend fun updateIncome(record: IncomeEntity) {
-        incomeDao.update(record.copy(updatedAt = Dates.now()))
+        incomeDao.update(record.copy(updatedAt = Dates.now(), dirty = true))
     }
 
-    suspend fun deleteIncome(id: String) = incomeDao.delete(id)
+    suspend fun deleteIncome(id: String) {
+        val existing = incomeDao.getById(id)
+        incomeDao.delete(id)
+        enqueueTombstone(existing?.userId, id, SyncKind.INCOME, existing?.remoteId)
+    }
 
     suspend fun addExpense(
         userId: String,
@@ -138,10 +149,14 @@ class FinanceRepository(
     }
 
     suspend fun updateExpense(record: ExpenseEntity) {
-        expenseDao.update(record.copy(updatedAt = Dates.now()))
+        expenseDao.update(record.copy(updatedAt = Dates.now(), dirty = true))
     }
 
-    suspend fun deleteExpense(id: String) = expenseDao.delete(id)
+    suspend fun deleteExpense(id: String) {
+        val existing = expenseDao.getById(id)
+        expenseDao.delete(id)
+        enqueueTombstone(existing?.userId, id, SyncKind.EXPENSE, existing?.remoteId)
+    }
 
     suspend fun addInvestment(
         userId: String,
@@ -182,10 +197,30 @@ class FinanceRepository(
     }
 
     suspend fun updateInvestment(record: InvestmentEntity) {
-        investmentDao.update(record.copy(updatedAt = Dates.now()))
+        investmentDao.update(record.copy(updatedAt = Dates.now(), dirty = true))
     }
 
-    suspend fun deleteInvestment(id: String) = investmentDao.delete(id)
+    suspend fun deleteInvestment(id: String) {
+        val existing = investmentDao.getById(id)
+        investmentDao.delete(id)
+        enqueueTombstone(existing?.userId, id, SyncKind.INVESTMENT, existing?.remoteId)
+    }
+
+    /**
+     * Records the remote half of a delete so the next sync removes the server copy.
+     * Skipped when the row was never known locally, or when it never reached the server.
+     */
+    private suspend fun enqueueTombstone(
+        userId: String?,
+        localId: String,
+        kind: SyncKind,
+        remoteId: String?
+    ) {
+        if (userId == null) return
+        syncDao.enqueue(
+            SyncTombstoneEntity(id = localId, userId = userId, kind = kind.name, remoteId = remoteId)
+        )
+    }
 
     suspend fun enqueueAutoCapture(userId: String, sender: String, rawText: String, parsed: ParsedTransaction) {
         val rule = senderRuleDao.get(userId, sender.uppercase())
@@ -207,57 +242,31 @@ class FinanceRepository(
         )
     }
 
-    suspend fun confirmCapture(item: AutoCaptureEntity) {
-        val amount = item.parsedAmount ?: return
-        val party = item.parsedParty ?: "Unknown"
-        val date = item.parsedDate ?: Dates.now()
-        val origin = if (item.sender.contains("@")) RecordOrigin.EMAIL else RecordOrigin.SMS
-        val result = when (item.parsedType) {
-            ParsedType.INCOME -> addIncome(
-                userId = item.userId,
-                amount = amount,
-                source = party,
-                category = IncomeCategory.OTHER,
-                date = date,
-                notes = "Confirmed from auto-capture",
-                recurring = false,
-                origin = origin
-            )
-            ParsedType.EXPENSE -> addExpense(
-                userId = item.userId,
-                amount = amount,
-                merchant = party,
-                category = ExpenseCategory.OTHER,
-                paymentMode = PaymentMode.OTHER,
-                date = date,
-                notes = "Confirmed from auto-capture",
-                recurring = false,
-                origin = origin
-            )
-            ParsedType.INVESTMENT -> addInvestment(
-                userId = item.userId,
-                name = party,
-                type = InvestmentType.OTHER,
-                invested = amount,
-                current = amount,
-                date = date,
-                broker = item.sender,
-                notes = "Confirmed from auto-capture",
-                origin = origin
-            )
+    /**
+     * Records the decision to accept a capture. The transaction itself is written by the backend
+     * on `POST /auto-capture/{id}/confirm`, and reaches this device through the normal record
+     * pull — building it here as well would count the same payment twice. The row is left dirty so
+     * the decision is replayed on the next sync, which is what makes confirming while offline work.
+     */
+    suspend fun confirmCapture(item: AutoCaptureEntity): Result<Unit> {
+        val amount = item.parsedAmount
+        if (amount == null || amount <= 0.0) {
+            // The backend rejects a transaction without a positive amount, so asking it to write
+            // this one would just leave the capture stuck between the queue and the ledger.
+            return Result.failure(IllegalStateException("No amount was detected — add this one by hand"))
         }
-        if (result.isSuccess || result.exceptionOrNull()?.message?.contains("Duplicate") == true) {
-            autoCaptureDao.update(item.copy(status = AutoCaptureStatus.CONFIRMED))
-        }
+        autoCaptureDao.update(item.copy(status = AutoCaptureStatus.CONFIRMED, dirty = true))
+        return Result.success(Unit)
     }
 
     suspend fun rejectCapture(item: AutoCaptureEntity) {
-        autoCaptureDao.update(item.copy(status = AutoCaptureStatus.REJECTED))
+        autoCaptureDao.update(item.copy(status = AutoCaptureStatus.REJECTED, dirty = true))
     }
 
     suspend fun commitImport(
         userId: String,
         fileName: String,
+        storedStatement: StoredStatement?,
         selected: List<ParsedTransaction>
     ): ImportBatchEntity {
         var committed = 0
@@ -283,7 +292,14 @@ class FinanceRepository(
             status = "committed",
             totalParsed = selected.size,
             committed = committed,
-            createdAt = Dates.now()
+            createdAt = Dates.now(),
+            localPath = storedStatement?.path,
+            contentType = storedStatement?.contentType,
+            fileSize = storedStatement?.size ?: 0,
+            // Uploaded on the next sync so the statement itself is backed up on the server. The
+            // backend's own parse is never committed: the records above are already on their way
+            // there, and committing would create a second copy of every transaction.
+            dirty = storedStatement != null
         )
         importBatchDao.insert(batch)
         return batch
@@ -298,18 +314,24 @@ class FinanceRepository(
             investmentDao.countFingerprint(invFp) > 0
     }
 
+    /** Leaves the row dirty so the limit is pushed on the next sync. */
     suspend fun upsertBudget(userId: String, category: ExpenseCategory, limit: Double) {
         budgetDao.upsert(
             BudgetEntity(
-                id = Ids.fingerprint(listOf(userId, category.name)),
+                id = budgetIdFor(userId, category),
                 userId = userId,
                 category = category,
                 monthlyLimit = limit,
-                updatedAt = Dates.now()
+                updatedAt = Dates.now(),
+                dirty = true
             )
         )
     }
 
+    /**
+     * Sender rules are not rows on the account either — they are two lists inside the capture
+     * settings document, so any change flags the settings for a push.
+     */
     suspend fun upsertSenderRule(userId: String, sender: String, allowed: Boolean) {
         senderRuleDao.upsert(
             SenderRuleEntity(
@@ -319,19 +341,16 @@ class FinanceRepository(
                 allowed = allowed
             )
         )
+        preferences.markCaptureSettingsDirty()
     }
 
-    suspend fun deleteSenderRule(id: String) = senderRuleDao.delete(id)
-
-    suspend fun refreshInsights(userId: String, currency: String) {
-        val incomes = incomeDao.observe(userId, RecordStatus.CONFIRMED).first()
-        val expenses = expenseDao.observe(userId, RecordStatus.CONFIRMED).first()
-        val investments = investmentDao.observe(userId, RecordStatus.CONFIRMED).first()
-        insightDao.deleteForUser(userId)
-        insightDao.insertAll(InsightEngine.generate(userId, incomes, expenses, investments, currency))
+    suspend fun deleteSenderRule(id: String) {
+        senderRuleDao.delete(id)
+        preferences.markCaptureSettingsDirty()
     }
 
-    suspend fun updateInsight(item: InsightEntity) = insightDao.update(item)
+    /** A save/dismiss decision is pushed to the account on the next sync. */
+    suspend fun updateInsight(item: InsightEntity) = insightDao.update(item.copy(dirty = true))
 
     suspend fun wipeUserData(userId: String) {
         incomeDao.deleteForUser(userId)
@@ -342,27 +361,8 @@ class FinanceRepository(
         insightDao.deleteForUser(userId)
         budgetDao.deleteForUser(userId)
         senderRuleDao.deleteForUser(userId)
-    }
-
-    suspend fun exportCsv(userId: String): String {
-        val incomes = incomeDao.observe(userId, RecordStatus.CONFIRMED).first()
-        val expenses = expenseDao.observe(userId, RecordStatus.CONFIRMED).first()
-        val investments = investmentDao.observe(userId, RecordStatus.CONFIRMED).first()
-        val sb = StringBuilder()
-        sb.appendLine("type,date,party,category,amount,origin,notes")
-        incomes.forEach {
-            sb.appendLine("income,${Dates.format(it.date)},${csv(it.source)},${it.category},${it.amount},${it.origin},${csv(it.notes)}")
-        }
-        expenses.forEach {
-            sb.appendLine("expense,${Dates.format(it.date)},${csv(it.merchant)},${it.category},${it.amount},${it.origin},${csv(it.notes)}")
-        }
-        investments.forEach {
-            sb.appendLine("investment,${Dates.format(it.date)},${csv(it.instrumentName)},${it.type},${it.amountInvested},${it.origin},${csv(it.notes)}")
-        }
-        return sb.toString()
+        syncDao.deleteForUser(userId)
     }
 
     fun monthRange(month: YearMonth): Pair<Long, Long> = Dates.startOfMonth(month) to Dates.endOfMonth(month)
-
-    private fun csv(value: String): String = "\"${value.replace("\"", "\"\"")}\""
 }

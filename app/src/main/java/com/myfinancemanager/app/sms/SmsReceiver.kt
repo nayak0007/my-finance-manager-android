@@ -36,6 +36,10 @@ class SmsReceiver : BroadcastReceiver() {
                         parsed = parsed
                     )
                 }
+                // Best effort, off the receiver's own coroutine: the capture is already stored
+                // locally, so mirroring it to the review queue must not risk the broadcast timing
+                // out on a slow network. Whatever this misses is picked up by the next sync.
+                app.applicationScope.launch { app.container.syncEngine.sync(session.userId) }
             } finally {
                 pending.finish()
             }
