@@ -3,38 +3,43 @@ package com.myfinancemanager.app.ui.screens
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -45,8 +50,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.myfinancemanager.app.MyFinanceApp
 import com.myfinancemanager.app.data.local.StatementSource
@@ -56,6 +61,7 @@ import com.myfinancemanager.app.data.local.entity.ExpenseCategory
 import com.myfinancemanager.app.data.local.entity.ExpenseEntity
 import com.myfinancemanager.app.data.local.entity.ImportBatchEntity
 import com.myfinancemanager.app.data.local.entity.InsightEntity
+import com.myfinancemanager.app.data.local.entity.ParsedType
 import com.myfinancemanager.app.data.local.entity.SenderRuleEntity
 import com.myfinancemanager.app.data.parser.ParsedTransaction
 import com.myfinancemanager.app.data.prefs.AppPreferences
@@ -65,10 +71,22 @@ import com.myfinancemanager.app.sms.InboxScanner
 import com.myfinancemanager.app.ui.AppViewModel
 import com.myfinancemanager.app.ui.SyncSnapshot
 import com.myfinancemanager.app.ui.components.BudgetBar
+import com.myfinancemanager.app.ui.components.CategoryBadge
+import com.myfinancemanager.app.ui.components.CircleIconButton
 import com.myfinancemanager.app.ui.components.EmptyState
 import com.myfinancemanager.app.ui.components.EnumDropdown
+import com.myfinancemanager.app.ui.components.FilledTextField
+import com.myfinancemanager.app.ui.components.GradientCard
 import com.myfinancemanager.app.ui.components.MoneyField
+import com.myfinancemanager.app.ui.components.PillButton
+import com.myfinancemanager.app.ui.components.PillButtonVariant
 import com.myfinancemanager.app.ui.components.SectionTitle
+import com.myfinancemanager.app.ui.components.SettingsCard
+import com.myfinancemanager.app.ui.components.SurfaceCard
+import com.myfinancemanager.app.ui.theme.AxioLime
+import com.myfinancemanager.app.ui.theme.Ink900
+import com.myfinancemanager.app.ui.theme.LocalMoneyColors
+import com.myfinancemanager.app.ui.theme.TextSecondaryDark
 import com.myfinancemanager.app.util.Dates
 import com.myfinancemanager.app.util.Money
 import com.myfinancemanager.app.util.titleCase
@@ -77,7 +95,88 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.YearMonth
 
-@OptIn(ExperimentalMaterial3Api::class)
+// ---------------------------------------------------------------------------------------------
+// Shared chrome
+// ---------------------------------------------------------------------------------------------
+
+@Composable
+private fun ScreenHeader(
+    title: String,
+    onBack: (() -> Unit)? = null,
+    actions: @Composable RowScope.() -> Unit = {}
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (onBack != null) {
+            CircleIconButton(Icons.AutoMirrored.Rounded.ArrowBack, "Back", onBack, filled = true)
+            Spacer(Modifier.width(8.dp))
+        }
+        Text(
+            title,
+            style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.weight(1f)
+        )
+        actions()
+    }
+}
+
+@Composable
+private fun AxioSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
+    Switch(
+        checked = checked,
+        onCheckedChange = onChange,
+        colors = SwitchDefaults.colors(
+            checkedThumbColor = Ink900,
+            checkedTrackColor = AxioLime,
+            uncheckedThumbColor = TextSecondaryDark,
+            uncheckedTrackColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        )
+    )
+}
+
+@Composable
+private fun SettingRow(
+    title: String,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    trailing: (@Composable () -> Unit)? = null
+) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
+            if (subtitle != null) {
+                Spacer(Modifier.height(2.dp))
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        trailing?.invoke()
+    }
+}
+
+@Composable
+private fun CardDivider() {
+    HorizontalDivider(
+        thickness = 1.dp,
+        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
+        modifier = Modifier.padding(start = 16.dp)
+    )
+}
+
+// ---------------------------------------------------------------------------------------------
+// Import
+// ---------------------------------------------------------------------------------------------
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun ImportScreen(
     viewModel: AppViewModel,
@@ -108,18 +207,31 @@ fun ImportScreen(
             loading = false
         }
     }
-    Scaffold(topBar = {
-        TopAppBar(title = { Text("Smart Import") }, navigationIcon = {
-            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "Back") }
-        })
-    }) { padding ->
-        Column(Modifier.padding(padding).padding(16.dp)) {
-            Text("Upload a bank, card, or broker statement (CSV, TXT, or PDF text). Review every line before it is saved.")
-            Spacer(Modifier.height(12.dp))
-            Button(onClick = { picker.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) {
-                Text("Choose statement file")
-            }
-            OutlinedButton(
+    Scaffold(
+        containerColor = Ink900,
+        topBar = { ScreenHeader("Smart Import", onBack) }
+    ) { padding ->
+        Column(
+            Modifier
+                .padding(padding)
+                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            Text(
+                "Upload a bank, card, or broker statement (CSV, TXT, or PDF text). Review every line before it is saved.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(16.dp))
+            PillButton(
+                "Choose statement file",
+                onClick = { picker.launch(arrayOf("*/*")) },
+                modifier = Modifier.fillMaxWidth(),
+                variant = PillButtonVariant.Lime
+            )
+            Spacer(Modifier.height(8.dp))
+            PillButton(
+                "Load sample statement",
                 onClick = {
                     loading = true
                     scope.launch {
@@ -138,50 +250,98 @@ fun ImportScreen(
                         loading = false
                     }
                 },
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("Load sample statement") }
+                modifier = Modifier.fillMaxWidth(),
+                variant = PillButtonVariant.Outlined
+            )
             if (loading) {
-                Spacer(Modifier.height(12.dp))
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                Text("Parsing file…")
+                Spacer(Modifier.height(16.dp))
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)),
+                    color = AxioLime,
+                    trackColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                )
+                Spacer(Modifier.height(6.dp))
+                Text("Parsing file", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            source?.fileName?.let { Text("File: $it", modifier = Modifier.padding(top = 8.dp)) }
+            source?.fileName?.let {
+                Spacer(Modifier.height(12.dp))
+                Text("File: $it", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onBackground)
+            }
             if (parsed.isNotEmpty()) {
-                Text("${parsed.size} rows parsed. Uncheck duplicates or junk before commit.", modifier = Modifier.padding(vertical = 8.dp))
-                LazyColumn(modifier = Modifier.height(320.dp)) {
-                    items(parsed.indices.toList()) { index ->
-                        val tx = parsed[index]
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    "${parsed.size} rows parsed. Uncheck duplicates or junk before commit.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Spacer(Modifier.height(8.dp))
+                SettingsCard {
+                    parsed.forEachIndexed { index, tx ->
                         val skip = excluded[index] == true
-                        ListItem(
-                            headlineContent = { Text("${tx.party} · ${tx.type.name.titleCase()}") },
-                            supportingContent = {
-                                Text("${Money.format(tx.amount)} · ${Dates.format(tx.date)}${if (duplicates[index] == true) " · duplicate" else ""}")
-                            },
-                            trailingContent = {
-                                Checkbox(checked = !skip, onCheckedChange = { excluded[index] = !it })
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = !skip,
+                                onCheckedChange = { excluded[index] = !it },
+                                colors = CheckboxDefaults.colors(
+                                    checkedColor = AxioLime,
+                                    uncheckedColor = TextSecondaryDark,
+                                    checkmarkColor = Ink900
+                                )
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    "${tx.party} · ${tx.type.name.titleCase()}",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onBackground
+                                )
+                                Text(
+                                    "${Money.format(tx.amount)} · ${Dates.format(tx.date)}${if (duplicates[index] == true) " · duplicate" else ""}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
-                        )
+                        }
+                        if (index != parsed.lastIndex) CardDivider()
                     }
                 }
-                Button(
+                Spacer(Modifier.height(16.dp))
+                PillButton(
+                    "Confirm import",
                     onClick = {
                         val selected = parsed.filterIndexed { i, _ -> excluded[i] != true }
                         source?.let { viewModel.commitImport(it, selected) { onBack() } }
                     },
-                    enabled = source != null,
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Confirm import") }
+                    modifier = Modifier.fillMaxWidth(),
+                    variant = PillButtonVariant.Lime,
+                    enabled = source != null
+                )
             }
             SectionTitle("Recent imports")
-            if (batches.isEmpty()) Text("No imports yet.")
-            batches.take(8).forEach {
-                Text("${it.sourceFile} · ${it.committed}/${it.totalParsed} · ${Dates.format(it.createdAt)}")
+            if (batches.isEmpty()) {
+                Text("No imports yet.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            batches.take(8).forEach {
+                Text(
+                    "${it.sourceFile} · ${it.committed}/${it.totalParsed} · ${Dates.format(it.createdAt)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+            }
+            Spacer(Modifier.height(24.dp))
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+// ---------------------------------------------------------------------------------------------
+// Review queue
+// ---------------------------------------------------------------------------------------------
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun QueueScreen(
     items: List<AutoCaptureEntity>,
@@ -190,27 +350,77 @@ fun QueueScreen(
     onReject: (AutoCaptureEntity) -> Unit,
     onScanInbox: () -> Unit
 ) {
-    Scaffold(topBar = {
-        TopAppBar(title = { Text("Review queue") }, navigationIcon = {
-            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "Back") }
-        }, actions = {
-            TextButton(onClick = onScanInbox) { Text("Scan SMS") }
-        })
-    }) { padding ->
+    val money = LocalMoneyColors.current
+    Scaffold(
+        containerColor = Ink900,
+        topBar = {
+            ScreenHeader("Review queue", onBack) {
+                TextButton(onClick = onScanInbox) {
+                    Text("Scan SMS", color = AxioLime, style = MaterialTheme.typography.labelLarge)
+                }
+            }
+        }
+    ) { padding ->
         if (items.isEmpty()) {
-            EmptyState("Queue is clear", "Auto-detected SMS and import drafts will show here for confirmation.", Modifier.padding(padding))
+            EmptyState(
+                "Queue is clear",
+                "Auto-detected SMS and import drafts will show here for confirmation.",
+                Modifier.padding(padding)
+            )
         } else {
-            LazyColumn(Modifier.padding(padding)) {
+            LazyColumn(
+                Modifier.padding(padding),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 items(items, key = { it.id }) { item ->
-                    Card(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                        Column(Modifier.padding(16.dp)) {
-                            Text(item.parsedParty ?: "Unknown", fontWeight = FontWeight.SemiBold)
-                            Text("${item.parsedType.name.titleCase()} · ${item.parsedAmount?.let { Money.format(it) } ?: "-"}")
-                            Text(item.sender, style = MaterialTheme.typography.bodySmall)
-                            Text(item.rawText, style = MaterialTheme.typography.bodySmall, maxLines = 4)
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
-                                Button(onClick = { onConfirm(item) }) { Text("Confirm") }
-                                OutlinedButton(onClick = { onReject(item) }) { Text("Reject") }
+                    SurfaceCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CategoryBadge(item.parsedCategory ?: item.parsedType.name, size = 40.dp, iconSize = 18.dp)
+                                Spacer(Modifier.width(12.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        item.parsedParty ?: "Unknown",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.onBackground
+                                    )
+                                    Text(
+                                        "${item.parsedType.name.titleCase()} · ${item.sender}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Text(
+                                    item.parsedAmount?.let { Money.format(it) } ?: "-",
+                                    style = com.myfinancemanager.app.ui.theme.TabularAmount,
+                                    color = if (item.parsedType == ParsedType.INCOME) money.positive else MaterialTheme.colorScheme.onBackground
+                                )
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                item.rawText,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 3
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                PillButton(
+                                    "Confirm",
+                                    onClick = { onConfirm(item) },
+                                    modifier = Modifier.weight(1f),
+                                    variant = PillButtonVariant.Lime,
+                                    compact = true,
+                                    icon = Icons.Rounded.Check
+                                )
+                                PillButton(
+                                    "Reject",
+                                    onClick = { onReject(item) },
+                                    modifier = Modifier.weight(1f),
+                                    variant = PillButtonVariant.Outlined,
+                                    compact = true
+                                )
                             }
                         }
                     }
@@ -220,6 +430,10 @@ fun QueueScreen(
     }
 }
 
+// ---------------------------------------------------------------------------------------------
+// Insights
+// ---------------------------------------------------------------------------------------------
+
 @Composable
 fun InsightsScreen(
     insights: List<InsightEntity>,
@@ -227,37 +441,91 @@ fun InsightsScreen(
     onDismiss: (InsightEntity) -> Unit,
     onSave: (InsightEntity) -> Unit
 ) {
-    Column(Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
-        Text("Insights", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "Insights",
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(onClick = onRefresh) {
+                Text("Refresh", color = AxioLime, style = MaterialTheme.typography.labelLarge)
+            }
+        }
         Text(
-            "Suggestions are generated from your account and are informational only — not certified financial, tax, or investment advice.",
+            "Suggestions are generated from your account and are informational only - not certified financial, tax, or investment advice.",
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Spacer(Modifier.height(8.dp))
-        Button(onClick = onRefresh) { Text("Refresh insights") }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(16.dp))
         if (insights.isEmpty()) {
             EmptyState("No insights yet", "Add a few records, then refresh to generate observations.")
         } else {
             insights.forEach { item ->
-                Card(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text(item.category.titleCase(), style = MaterialTheme.typography.labelMedium)
-                        item.title?.let { Text(it, fontWeight = FontWeight.SemiBold) }
-                        Text(item.insightText, modifier = Modifier.padding(vertical = 8.dp))
-                        Row {
-                            TextButton(onClick = { onSave(item) }) { Text(if (item.saved) "Saved" else "Save") }
-                            TextButton(onClick = { onDismiss(item) }) { Text("Dismiss") }
+                SurfaceCard(Modifier.fillMaxWidth().padding(bottom = 12.dp), shape = RoundedCornerShape(20.dp)) {
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(AxioLime.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Rounded.AutoAwesome, contentDescription = null, modifier = Modifier.size(20.dp), tint = AxioLime)
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    item.category.titleCase(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = AxioLime
+                                )
+                                item.title?.let {
+                                    Text(it, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground)
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            item.insightText,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            PillButton(
+                                if (item.saved) "Saved" else "Save",
+                                onClick = { onSave(item) },
+                                variant = if (item.saved) PillButtonVariant.Outlined else PillButtonVariant.Lime,
+                                compact = true,
+                                enabled = !item.saved,
+                                icon = if (item.saved) Icons.Rounded.Check else null
+                            )
+                            PillButton("Dismiss", onClick = { onDismiss(item) }, variant = PillButtonVariant.Text, compact = true, icon = Icons.Rounded.Close)
                         }
                     }
                 }
             }
         }
+        Spacer(Modifier.height(24.dp))
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+// ---------------------------------------------------------------------------------------------
+// Settings
+// ---------------------------------------------------------------------------------------------
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     prefs: AppPreferences,
@@ -271,88 +539,120 @@ fun SettingsScreen(
 ) {
     var display by remember { mutableStateOf(email.substringBefore("@")) }
     var deletePrompt by remember { mutableStateOf(false) }
-    Scaffold(topBar = {
-        TopAppBar(title = { Text("Settings") }, navigationIcon = {
-            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "Back") }
-        })
-    }) { padding ->
-        Column(Modifier.padding(padding).padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Account", fontWeight = FontWeight.SemiBold)
-            Text(email)
-            OutlinedTextField(display, { display = it }, label = { Text("Display name") }, modifier = Modifier.fillMaxWidth())
-            Button(onClick = { viewModel.updateDisplayName(display) }, modifier = Modifier.fillMaxWidth()) { Text("Save profile") }
-            EnumDropdown("Currency", prefs.currencyCode, listOf("INR", "USD", "EUR", "GBP")) { viewModel.setCurrency(it) }
+    Scaffold(
+        containerColor = Ink900,
+        topBar = { ScreenHeader("Settings", onBack) }
+    ) { padding ->
+        Column(
+            Modifier
+                .padding(padding)
+                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            SectionTitle("Account")
+            SettingsCard {
+                SettingRow("Signed in as", subtitle = email)
+                CardDivider()
+                Column(Modifier.padding(16.dp)) {
+                    FilledTextField(display, { display = it }, label = "Display name")
+                    Spacer(Modifier.height(12.dp))
+                    PillButton("Save profile", { viewModel.updateDisplayName(display) }, modifier = Modifier.fillMaxWidth(), variant = PillButtonVariant.Dark)
+                    Spacer(Modifier.height(16.dp))
+                    EnumDropdown("Currency", prefs.currencyCode, listOf("INR", "USD", "EUR", "GBP")) { viewModel.setCurrency(it) }
+                }
+            }
+
             SectionTitle("Capture")
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("SMS auto-capture")
+            SettingsCard {
+                SettingRow(
+                    "SMS auto-capture",
+                    subtitle = "Bank alerts are read on this device, then queued here for review."
+                ) {
+                    AxioSwitch(prefs.smsCaptureEnabled) { enabled ->
+                        if (enabled) onRequestSms() else viewModel.setSmsEnabled(false)
+                    }
+                }
+                CardDivider()
+                SettingRow("Email auto-capture", subtitle = "Connect Gmail later via backend OAuth.") {
+                    AxioSwitch(prefs.emailCaptureEnabled) { viewModel.setEmailEnabled(it) }
+                }
+                CardDivider()
+                SettingRow("Sender allow / block lists", subtitle = "Choose which senders can create drafts.") {
+                    TextButton(onClick = onSenders) { Text("Manage", color = AxioLime) }
+                }
+            }
+
+            SectionTitle("Notifications")
+            SettingsCard {
+                SettingRow("Insight notifications", subtitle = "Get nudges when new insights are ready.") {
+                    AxioSwitch(prefs.notificationsEnabled) { viewModel.setNotifications(it) }
+                }
+                CardDivider()
+                Column(Modifier.padding(16.dp)) {
+                    EnumDropdown("Insight frequency (days)", prefs.insightFrequencyDays, listOf(1, 3, 7, 14, 30)) {
+                        viewModel.setInsightFrequency(it)
+                    }
+                }
+            }
+
+            SectionTitle("Sync")
+            SettingsCard {
+                Column(Modifier.padding(16.dp)) {
                     Text(
-                        "Bank alerts are read on this device, then queued here for review.",
-                        style = MaterialTheme.typography.bodySmall
+                        "Income, expenses and investments are stored in your account, so they survive a reinstall and stay in step with any other device you sign in on. Confirming an alert asks the backend to record the transaction.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    sync.error?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    Text(
+                        sync.lastAt?.let { "Last synced ${Dates.formatDateTime(it)}" } ?: "Not synced yet",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text("Account sign-in: ${NeonAuthConfig.BASE_URL}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Data server: ${ApiConfig.BASE_URL}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(12.dp))
+                    PillButton(
+                        if (sync.running) "Syncing" else "Sync now",
+                        onClick = { viewModel.syncNow() },
+                        modifier = Modifier.fillMaxWidth(),
+                        variant = PillButtonVariant.Outlined,
+                        enabled = !sync.running,
+                        loading = sync.running
                     )
                 }
-                Switch(checked = prefs.smsCaptureEnabled, onCheckedChange = {
-                    if (it) onRequestSms() else viewModel.setSmsEnabled(false)
-                })
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Email auto-capture")
-                    Text("Connect Gmail later via backend OAuth.", style = MaterialTheme.typography.bodySmall)
-                }
-                Switch(checked = prefs.emailCaptureEnabled, onCheckedChange = { viewModel.setEmailEnabled(it) })
-            }
-            OutlinedButton(onClick = onSenders, modifier = Modifier.fillMaxWidth()) { Text("Sender allow / block lists") }
-            SectionTitle("Notifications")
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("Insight notifications")
-                Switch(checked = prefs.notificationsEnabled, onCheckedChange = { viewModel.setNotifications(it) })
-            }
-            EnumDropdown("Insight frequency (days)", prefs.insightFrequencyDays, listOf(1, 3, 7, 14, 30)) {
-                viewModel.setInsightFrequency(it)
-            }
-            SectionTitle("Sync")
-            Text(
-                "Income, expenses and investments are stored in your account, so they survive a reinstall and stay in step with any other device you sign in on. Your SMS review queue is mirrored there too, and confirming an alert asks the backend to record the transaction, so a confirm taken offline is applied as soon as your phone is back online.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-            )
-            sync.error?.let {
-                Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            }
-            Text(
-                sync.lastAt?.let { "Last synced ${Dates.formatDateTime(it)}" } ?: "Not synced yet",
-                style = MaterialTheme.typography.bodySmall
-            )
-            // Shown so there is no doubt about where things go. These are two different services:
-            // the account is held by Neon Auth, while every financial record is held by the API.
-            Text(
-                "Account sign-in: ${NeonAuthConfig.BASE_URL}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-            )
-            Text(
-                "Data server: ${ApiConfig.BASE_URL}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-            )
-            OutlinedButton(
-                onClick = { viewModel.syncNow() },
-                enabled = !sync.running,
-                modifier = Modifier.fillMaxWidth()
-            ) { Text(if (sync.running) "Syncing…" else "Sync now") }
+
             SectionTitle("Data")
-            OutlinedButton(onClick = onExport, modifier = Modifier.fillMaxWidth()) { Text("Export CSV") }
-            OutlinedButton(onClick = { viewModel.logout() }, modifier = Modifier.fillMaxWidth()) { Text("Log out") }
-            TextButton(onClick = { deletePrompt = true }) {
-                Text("Delete account", color = MaterialTheme.colorScheme.error)
+            SettingsCard {
+                SettingRow("Export", subtitle = "Download a CSV of every record in your account.") {
+                    TextButton(onClick = onExport) { Text("Export", color = AxioLime) }
+                }
+                CardDivider()
+                SettingRow("Log out", subtitle = "Sign out on this device.") {
+                    TextButton(onClick = { viewModel.logout() }) { Text("Log out") }
+                }
+                CardDivider()
+                SettingRow("Delete account", subtitle = "Removes every finance record the server holds.") {
+                    TextButton(onClick = { deletePrompt = true }) {
+                        Text("Delete", color = MaterialTheme.colorScheme.error)
+                    }
+                }
             }
+            Spacer(Modifier.height(24.dp))
         }
     }
 
     if (deletePrompt) {
         AlertDialog(
             onDismissRequest = { deletePrompt = false },
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            shape = RoundedCornerShape(24.dp),
             title = { Text("Delete account?") },
             text = {
                 Text(
@@ -378,7 +678,11 @@ fun SettingsScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+// ---------------------------------------------------------------------------------------------
+// Budgets
+// ---------------------------------------------------------------------------------------------
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun BudgetScreen(
     budgets: List<BudgetEntity>,
@@ -394,32 +698,60 @@ fun BudgetScreen(
         val d = Dates.toLocalDate(it.date)
         d.year == month.year && d.month == month.month
     }.groupBy { it.category }.mapValues { it.value.sumOf { e -> e.amount } }
-    Scaffold(topBar = {
-        TopAppBar(title = { Text("Category budgets") }, navigationIcon = {
-            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "Back") }
-        })
-    }) { padding ->
-        Column(Modifier.padding(padding).padding(16.dp)) {
-            EnumDropdown("Category", category, ExpenseCategory.entries.toList()) { category = it }
-            Spacer(Modifier.height(8.dp))
-            MoneyField(amount, "Monthly limit") { amount = it }
-            Spacer(Modifier.height(8.dp))
-            Button(onClick = { amount.toDoubleOrNull()?.let { onSave(category, it) } }, modifier = Modifier.fillMaxWidth()) {
-                Text("Save budget")
+    val totalBudget = budgets.sumOf { it.monthlyLimit }
+    val totalSpent = spent.values.sum()
+    Scaffold(
+        containerColor = Ink900,
+        topBar = { ScreenHeader("Category budgets", onBack) }
+    ) { padding ->
+        Column(
+            Modifier
+                .padding(padding)
+                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            if (totalBudget > 0) {
+                GradientCard(
+                    eyebrow = "This month",
+                    title = "Budget used",
+                    amount = "${Money.format(totalSpent, currency)} of ${Money.format(totalBudget, currency)}"
+                )
+                Spacer(Modifier.height(16.dp))
             }
-            Spacer(Modifier.height(16.dp))
+            SurfaceCard(Modifier.fillMaxWidth()) {
+                Column {
+                    EnumDropdown("Category", category, ExpenseCategory.entries.toList()) { category = it }
+                    Spacer(Modifier.height(16.dp))
+                    MoneyField(amount, "Monthly limit") { amount = it }
+                    Spacer(Modifier.height(16.dp))
+                    PillButton(
+                        "Save budget",
+                        onClick = { amount.toDoubleOrNull()?.let { onSave(category, it) } },
+                        modifier = Modifier.fillMaxWidth(),
+                        variant = PillButtonVariant.Lime,
+                        enabled = amount.toDoubleOrNull() != null
+                    )
+                }
+            }
+            Spacer(Modifier.height(24.dp))
             if (budgets.isEmpty()) {
-                EmptyState("No budgets", "Optional v1 stretch: set a monthly cap per category.")
+                EmptyState("No budgets", "Set a monthly cap per category to track your pace.")
             } else {
                 budgets.forEach { b ->
                     BudgetBar(spent[b.category] ?: 0.0, b.monthlyLimit, currency, b.category.name)
+                    Spacer(Modifier.height(10.dp))
                 }
             }
+            Spacer(Modifier.height(24.dp))
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+// ---------------------------------------------------------------------------------------------
+// Senders
+// ---------------------------------------------------------------------------------------------
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun SenderScreen(
     rules: List<SenderRuleEntity>,
@@ -429,29 +761,46 @@ fun SenderScreen(
 ) {
     var sender by remember { mutableStateOf("") }
     var allowed by remember { mutableStateOf(true) }
-    Scaffold(topBar = {
-        TopAppBar(title = { Text("SMS senders") }, navigationIcon = {
-            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "Back") }
-        })
-    }) { padding ->
-        Column(Modifier.padding(padding).padding(16.dp)) {
-            OutlinedTextField(sender, { sender = it }, label = { Text("Sender ID (e.g. VM-HDFCBK)") }, modifier = Modifier.fillMaxWidth())
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                FilterChip(selected = allowed, onClick = { allowed = true }, label = { Text("Allow") })
-                Spacer(Modifier.padding(8.dp))
-                FilterChip(selected = !allowed, onClick = { allowed = false }, label = { Text("Block") })
+    Scaffold(
+        containerColor = Ink900,
+        topBar = { ScreenHeader("SMS senders", onBack) }
+    ) { padding ->
+        Column(
+            Modifier
+                .padding(padding)
+                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            SurfaceCard(Modifier.fillMaxWidth()) {
+                Column {
+                    FilledTextField(sender, { sender = it }, label = "Sender ID (e.g. VM-HDFCBK)")
+                    Spacer(Modifier.height(16.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        com.myfinancemanager.app.ui.components.AxioFilterChip("Allow", allowed) { allowed = true }
+                        com.myfinancemanager.app.ui.components.AxioFilterChip("Block", !allowed) { allowed = false }
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    PillButton(
+                        "Save rule",
+                        onClick = { if (sender.isNotBlank()) onSave(sender, allowed) },
+                        modifier = Modifier.fillMaxWidth(),
+                        variant = PillButtonVariant.Lime,
+                        enabled = sender.isNotBlank()
+                    )
+                }
             }
-            Button(onClick = { if (sender.isNotBlank()) onSave(sender, allowed) }, modifier = Modifier.fillMaxWidth()) {
-                Text("Save rule")
+            Spacer(Modifier.height(16.dp))
+            SettingsCard {
+                rules.forEachIndexed { index, rule ->
+                    SettingRow(rule.sender, subtitle = if (rule.allowed) "Allowed" else "Blocked") {
+                        TextButton(onClick = { onDelete(rule.id) }) {
+                            Text("Remove", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                    if (index != rules.lastIndex) CardDivider()
+                }
             }
-            Spacer(Modifier.height(12.dp))
-            rules.forEach { rule ->
-                ListItem(
-                    headlineContent = { Text(rule.sender) },
-                    supportingContent = { Text(if (rule.allowed) "Allowed" else "Blocked") },
-                    trailingContent = { TextButton(onClick = { onDelete(rule.id) }) { Text("Remove") } }
-                )
-            }
+            Spacer(Modifier.height(24.dp))
         }
     }
 }

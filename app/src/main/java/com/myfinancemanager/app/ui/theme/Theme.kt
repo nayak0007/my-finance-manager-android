@@ -1,54 +1,94 @@
 package com.myfinancemanager.app.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
-val GreenPrimary = Color(0xFF0F6E56)
-val GreenDark = Color(0xFF094936)
-val IncomeGreen = Color(0xFF1B8A5A)
-val ExpenseRed = Color(0xFFC44536)
-val InvestBlue = Color(0xFF2B6CB0)
-val SurfaceMint = Color(0xFFF3F8F5)
+/** Semantic money colours, read through [LocalMoneyColors] so components never branch on theme. */
+data class MoneyColors(
+    val positive: Color,
+    val negative: Color,
+    val invest: Color,
+    val warning: Color,
+    val info: Color
+)
 
-private val LightColors = lightColorScheme(
-    primary = GreenPrimary,
+val LocalMoneyColors = staticCompositionLocalOf {
+    MoneyColors(MoneyPositiveDark, MoneyNegativeDark, MoneyInvestDark, MoneyWarning, MoneyInfoDark)
+}
+
+private val AxioDarkColors = darkColorScheme(
+    primary = AxioLime,
+    onPrimary = Ink900,
+    primaryContainer = Color(0xFF2E3A00),
+    onPrimaryContainer = AxioLime,
+    secondary = MoneyInvestDark,
+    onSecondary = Color.White,
+    tertiary = MoneyInfoDark,
+    background = Ink900,
+    onBackground = TextPrimaryDark,
+    surface = Ink850,
+    onSurface = TextPrimaryDark,
+    surfaceVariant = Ink800,
+    onSurfaceVariant = TextSecondaryDark,
+    surfaceContainer = Ink800,
+    surfaceContainerHigh = Ink700,
+    surfaceContainerHighest = Ink600,
+    surfaceContainerLow = Ink850,
+    outline = InkOutline,
+    outlineVariant = InkOutlineStrong,
+    error = MoneyNegativeDark,
+    onError = Ink900
+)
+
+private val AxioLightColors = lightColorScheme(
+    primary = AxioLimeDark,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFCDEADF),
-    onPrimaryContainer = GreenDark,
-    secondary = Color(0xFF3D6B5C),
-    background = Color(0xFFF7FAF8),
-    surface = Color.White,
-    surfaceVariant = SurfaceMint,
-    error = ExpenseRed,
-    onBackground = Color(0xFF14231C),
-    onSurface = Color(0xFF14231C)
+    primaryContainer = Color(0xFFEAF6C8),
+    onPrimaryContainer = Color(0xFF33420A),
+    secondary = MoneyInvestLight,
+    onSecondary = Color.White,
+    tertiary = MoneyInfoLight,
+    background = Paper,
+    onBackground = TextPrimaryLight,
+    surface = PaperSurface,
+    onSurface = TextPrimaryLight,
+    surfaceVariant = PaperContainerHigh,
+    onSurfaceVariant = TextSecondaryLight,
+    surfaceContainer = Paper,
+    surfaceContainerHigh = PaperContainerHigh,
+    surfaceContainerHighest = PaperContainerHigh,
+    surfaceContainerLow = PaperSurface,
+    outline = PaperOutline,
+    outlineVariant = PaperOutline,
+    error = MoneyNegativeLight,
+    onError = Color.White
 )
 
-private val DarkColors = darkColorScheme(
-    primary = Color(0xFF7FCBB0),
-    onPrimary = GreenDark,
-    primaryContainer = GreenPrimary,
-    onPrimaryContainer = Color.White,
-    secondary = Color(0xFF9AD4C0),
-    background = Color(0xFF0E1713),
-    surface = Color(0xFF15201B),
-    surfaceVariant = Color(0xFF1E2C26),
-    error = Color(0xFFE07A70),
-    onBackground = Color(0xFFE7F2EC),
-    onSurface = Color(0xFFE7F2EC)
-)
-
+/**
+ * axio is dark-first, so dark is the default regardless of the system setting. Light is a
+ * derived secondary theme and is never selected automatically.
+ */
 @Composable
 fun MyFinanceTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = true,
     content: @Composable () -> Unit
 ) {
-    MaterialTheme(
-        colorScheme = if (darkTheme) DarkColors else LightColors,
-        content = content
-    )
+    val money = if (darkTheme) {
+        MoneyColors(MoneyPositiveDark, MoneyNegativeDark, MoneyInvestDark, MoneyWarning, MoneyInfoDark)
+    } else {
+        MoneyColors(MoneyPositiveLight, MoneyNegativeLight, MoneyInvestLight, MoneyWarning, MoneyInfoLight)
+    }
+    CompositionLocalProvider(LocalMoneyColors provides money) {
+        MaterialTheme(
+            colorScheme = if (darkTheme) AxioDarkColors else AxioLightColors,
+            typography = AxioTypography,
+            shapes = AxioShapes,
+            content = content
+        )
+    }
 }

@@ -5,31 +5,49 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import androidx.core.content.FileProvider
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Payments
+import androidx.compose.material.icons.outlined.ShoppingBag
+import androidx.compose.material.icons.automirrored.outlined.TrendingUp
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Payments
+import androidx.compose.material.icons.rounded.ShoppingBag
+import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,7 +56,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -71,6 +95,13 @@ import com.myfinancemanager.app.ui.screens.ScanInboxEffect
 import com.myfinancemanager.app.ui.screens.SenderScreen
 import com.myfinancemanager.app.ui.screens.SettingsScreen
 import com.myfinancemanager.app.ui.screens.SignupScreen
+import com.myfinancemanager.app.ui.theme.AxioLime
+import com.myfinancemanager.app.ui.theme.Ink700
+import com.myfinancemanager.app.ui.theme.Ink800
+import com.myfinancemanager.app.ui.theme.Ink900
+import com.myfinancemanager.app.ui.theme.InkOutline
+import com.myfinancemanager.app.ui.theme.TextPrimaryDark
+import com.myfinancemanager.app.ui.theme.TextSecondaryDark
 import com.myfinancemanager.app.ui.theme.MyFinanceTheme
 import java.io.File
 
@@ -78,11 +109,84 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // axio is dark-only, so the system bars keep light icons regardless of the system setting.
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
+        }
         val app = application as MyFinanceApp
         setContent {
             MyFinanceTheme {
                 val vm: AppViewModel = viewModel(factory = AppViewModel.factory(app.container))
                 FinanceRoot(vm)
+            }
+        }
+    }
+}
+
+private data class TabVisual(
+    val label: String,
+    val outlined: ImageVector,
+    val filled: ImageVector
+)
+
+private fun visualFor(tab: TabDest): TabVisual = when (tab) {
+    TabDest.Home -> TabVisual("Home", Icons.Outlined.Home, Icons.Rounded.Home)
+    TabDest.Income -> TabVisual("Income", Icons.Outlined.Payments, Icons.Rounded.Payments)
+    TabDest.Expense -> TabVisual("Spend", Icons.Outlined.ShoppingBag, Icons.Rounded.ShoppingBag)
+    TabDest.Investments -> TabVisual("Invest", Icons.AutoMirrored.Outlined.TrendingUp, Icons.AutoMirrored.Rounded.TrendingUp)
+    TabDest.Insights -> TabVisual("Insights", Icons.Outlined.AutoAwesome, Icons.Rounded.AutoAwesome)
+}
+
+@Composable
+private fun AxioBottomBar(currentRoute: String?, onSelect: (TabDest) -> Unit) {
+    Surface(color = Ink900) {
+        Column(Modifier.fillMaxWidth()) {
+            HorizontalDivider(thickness = 1.dp, color = InkOutline)
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(64.dp)
+                    .navigationBarsPadding()
+            ) {
+                TabDest.entries.forEach { tab ->
+                    val selected = currentRoute == tab.route
+                    val visual = visualFor(tab)
+                    val contentColor by animateColorAsState(
+                        targetValue = if (selected) TextPrimaryDark else TextSecondaryDark,
+                        animationSpec = tween(200),
+                        label = "navColor"
+                    )
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .clickable { onSelect(tab) },
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = if (selected) visual.filled else visual.outlined,
+                            contentDescription = visual.label,
+                            modifier = Modifier.size(24.dp),
+                            tint = contentColor
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            visual.label,
+                            style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
+                            color = contentColor
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Box(
+                            Modifier
+                                .size(3.dp)
+                                .clip(CircleShape)
+                                .background(if (selected) AxioLime else androidx.compose.ui.graphics.Color.Transparent)
+                        )
+                    }
+                }
             }
         }
     }
@@ -106,7 +210,7 @@ private fun FinanceRoot(viewModel: AppViewModel) {
 
     LaunchedEffect(state.message) {
         val msg = state.message ?: return@LaunchedEffect
-        snackbar.showSnackbar(msg)
+        snackbar.showSnackbar(msg, withDismissAction = false, duration = androidx.compose.material3.SnackbarDuration.Short)
         viewModel.consumeMessage()
     }
 
@@ -138,13 +242,15 @@ private fun FinanceRoot(viewModel: AppViewModel) {
     if (showSmsRationale) {
         AlertDialog(
             onDismissRequest = { showSmsRationale = false },
+            containerColor = Ink800,
+            shape = RoundedCornerShape(24.dp),
             title = { Text("SMS access") },
             text = { Text("SMS access is used only to detect bank and UPI transaction alerts so they can be reviewed before saving. Nothing is shared or sold. You can turn this off in Settings at any time.") },
             confirmButton = {
                 TextButton(onClick = {
                     showSmsRationale = false
                     smsPermission.launch(arrayOf(Manifest.permission.READ_SMS, Manifest.permission.RECEIVE_SMS))
-                }) { Text("Continue") }
+                }) { Text("Continue", color = AxioLime) }
             },
             dismissButton = {
                 TextButton(onClick = { showSmsRationale = false }) { Text("Not now") }
@@ -153,7 +259,9 @@ private fun FinanceRoot(viewModel: AppViewModel) {
     }
 
     if (!state.ready) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+        Box(Modifier.fillMaxSize().background(Ink900), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = AxioLime)
+        }
         return
     }
 
@@ -163,34 +271,26 @@ private fun FinanceRoot(viewModel: AppViewModel) {
     val showBar = currentRoute in tabs.map { it.route }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbar) },
+        containerColor = Ink900,
+        snackbarHost = {
+            SnackbarHost(snackbar) { data ->
+                Snackbar(
+                    snackbarData = data,
+                    containerColor = Ink700,
+                    contentColor = TextPrimaryDark,
+                    actionColor = AxioLime,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
+        },
         bottomBar = {
             if (showBar) {
-                NavigationBar {
-                    tabs.forEach { tab ->
-                        NavigationBarItem(
-                            selected = currentRoute == tab.route,
-                            onClick = {
-                                nav.navigate(tab.route) {
-                                    popUpTo(Routes.Home) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
-                            icon = {
-                                Icon(
-                                    imageVector = when (tab) {
-                                        TabDest.Home -> Icons.Filled.Home
-                                        TabDest.Income -> Icons.Filled.Star
-                                        TabDest.Expense -> Icons.Filled.ShoppingCart
-                                        TabDest.Investments -> Icons.Filled.List
-                                        TabDest.Insights -> Icons.Filled.Info
-                                    },
-                                    contentDescription = tab.label
-                                )
-                            },
-                            label = { Text(tab.label) }
-                        )
+                AxioBottomBar(currentRoute) { tab ->
+                    nav.navigate(tab.route) {
+                        popUpTo(Routes.Home) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
                     }
                 }
             }
@@ -202,7 +302,7 @@ private fun FinanceRoot(viewModel: AppViewModel) {
             modifier = Modifier.padding(padding)
         ) {
             composable(Routes.Splash) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AxioLime) }
             }
             composable(Routes.Login) {
                 LoginScreen(viewModel, state.authBusy, state.authError) {

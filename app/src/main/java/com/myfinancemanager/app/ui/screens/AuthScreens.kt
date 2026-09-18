@@ -1,6 +1,8 @@
 package com.myfinancemanager.app.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -9,13 +11,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.TrendingUp
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -25,51 +27,56 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.myfinancemanager.app.ui.AppViewModel
+import com.myfinancemanager.app.ui.components.FilledTextField
+import com.myfinancemanager.app.ui.components.PillButton
+import com.myfinancemanager.app.ui.components.PillButtonVariant
+import com.myfinancemanager.app.ui.theme.AxioLime
+import com.myfinancemanager.app.ui.theme.AxioLimeDeep
+import com.myfinancemanager.app.ui.theme.InkBlack
+import com.myfinancemanager.app.ui.theme.LocalMoneyColors
 
-/**
- * The sign-in buttons stay disabled and show a spinner for the whole round trip.
- *
- * That matters here more than in most apps: the backend runs on a free tier that spins down when
- * idle, so the first request of a session can take close to a minute. Without a visible busy
- * state the screen looks frozen and people tap again, which fires a duplicate request.
- */
 @Composable
-private fun SubmitButton(
-    text: String,
-    busy: Boolean,
-    enabled: Boolean,
-    onClick: () -> Unit
-) {
-    Button(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        enabled = enabled && !busy
+private fun BrandMark() {
+    Box(
+        Modifier
+            .size(72.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(Brush.linearGradient(listOf(AxioLime, AxioLimeDeep))),
+        contentAlignment = Alignment.Center
     ) {
-        if (busy) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(18.dp),
-                strokeWidth = 2.dp,
-                color = MaterialTheme.colorScheme.onPrimary
-            )
-        } else {
-            Text(text)
-        }
+        Icon(
+            Icons.AutoMirrored.Rounded.TrendingUp,
+            contentDescription = null,
+            modifier = Modifier.size(36.dp),
+            tint = InkBlack
+        )
     }
+}
+
+@Composable
+private fun AuthError(error: String?) {
+    if (error.isNullOrBlank()) return
+    val money = LocalMoneyColors.current
+    Spacer(Modifier.height(12.dp))
+    Text(error, color = money.negative, style = MaterialTheme.typography.bodyMedium)
 }
 
 @Composable
 private fun BusyHint(busy: Boolean) {
     if (!busy) return
-    Spacer(Modifier.height(10.dp))
+    Spacer(Modifier.height(12.dp))
     Text(
-        "Talking to the server… The free hosting plan wakes on the first request, which can take up to a minute.",
+        "Talking to the server. The free hosting plan wakes on the first request, which can take up to a minute.",
         style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center
     )
 }
 
@@ -83,59 +90,66 @@ fun LoginScreen(
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.Center
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp)
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("My Finance Manager", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(8.dp))
-        Text("Track income, spend, and investments in one place.")
+        Spacer(Modifier.height(48.dp))
+        BrandMark()
         Spacer(Modifier.height(24.dp))
-        OutlinedTextField(
+        Text(
+            "My Finance Manager",
+            style = MaterialTheme.typography.displaySmall,
+            color = MaterialTheme.colorScheme.onBackground,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Track income, spend, and investments in one place.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(32.dp))
+        FilledTextField(
             value = email,
             onValueChange = { email = it },
-            label = { Text("Email") },
-            singleLine = true,
+            label = "Email",
             enabled = !busy,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-            modifier = Modifier.fillMaxWidth()
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
         )
-        Spacer(Modifier.height(12.dp))
-        OutlinedTextField(
+        Spacer(Modifier.height(16.dp))
+        FilledTextField(
             value = password,
             onValueChange = { password = it },
-            label = { Text("Password") },
-            singleLine = true,
+            label = "Password",
             enabled = !busy,
-            visualTransformation = PasswordVisualTransformation(),
-            modifier = Modifier.fillMaxWidth()
+            visualTransformation = PasswordVisualTransformation()
         )
-        if (!error.isNullOrBlank()) {
-            Spacer(Modifier.height(8.dp))
-            Text(error, color = MaterialTheme.colorScheme.error)
-        }
-        Spacer(Modifier.height(20.dp))
-        SubmitButton(
-            text = "Log in",
-            busy = busy,
+        AuthError(error)
+        Spacer(Modifier.height(24.dp))
+        PillButton(
+            "Log in",
+            onClick = { viewModel.login(email, password) {} },
+            modifier = Modifier.fillMaxWidth(),
+            variant = PillButtonVariant.Lime,
             enabled = email.contains("@") && password.isNotEmpty(),
-            onClick = { viewModel.login(email, password) {} }
+            loading = busy
         )
         BusyHint(busy)
-        Spacer(Modifier.height(8.dp))
-        // Neon Auth can do Google sign-in, but only through a browser redirect this app does not
-        // implement yet. Reporting that clearly is better than the old behaviour of minting a
-        // local-only fake session that no server had ever issued.
-        OutlinedButton(
+        Spacer(Modifier.height(12.dp))
+        PillButton(
+            "Continue with Google",
             onClick = { viewModel.loginGoogle {} },
-            enabled = !busy,
-            modifier = Modifier.fillMaxWidth()
-        ) { Text("Continue with Google") }
-        TextButton(
-            onClick = onSignup,
-            enabled = !busy,
-            modifier = Modifier.align(Alignment.CenterHorizontally)
-        ) {
-            Text("Create an account")
+            modifier = Modifier.fillMaxWidth(),
+            variant = PillButtonVariant.Outlined,
+            enabled = !busy
+        )
+        Spacer(Modifier.height(8.dp))
+        TextButton(onClick = onSignup, enabled = !busy) {
+            Text("Create an account", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -151,58 +165,54 @@ fun SignupScreen(
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.Center
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp)
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("Create account", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(16.dp))
-        OutlinedTextField(
-            value = name,
-            onValueChange = { name = it },
-            label = { Text("Display name") },
-            enabled = !busy,
-            modifier = Modifier.fillMaxWidth()
+        Spacer(Modifier.height(32.dp))
+        BrandMark()
+        Spacer(Modifier.height(20.dp))
+        Text(
+            "Create account",
+            style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.onBackground
         )
-        Spacer(Modifier.height(12.dp))
-        OutlinedTextField(
+        Spacer(Modifier.height(24.dp))
+        FilledTextField(name, { name = it }, label = "Display name", enabled = !busy)
+        Spacer(Modifier.height(16.dp))
+        FilledTextField(
             value = email,
             onValueChange = { email = it },
-            label = { Text("Email") },
-            singleLine = true,
+            label = "Email",
             enabled = !busy,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-            modifier = Modifier.fillMaxWidth()
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
         )
-        Spacer(Modifier.height(12.dp))
-        OutlinedTextField(
+        Spacer(Modifier.height(16.dp))
+        FilledTextField(
             value = password,
             onValueChange = { password = it },
-            label = { Text("Password (min 8)") },
-            singleLine = true,
+            label = "Password (min 8)",
             enabled = !busy,
-            visualTransformation = PasswordVisualTransformation(),
-            modifier = Modifier.fillMaxWidth()
+            visualTransformation = PasswordVisualTransformation()
         )
-        if (!error.isNullOrBlank()) {
-            Spacer(Modifier.height(8.dp))
-            Text(error, color = MaterialTheme.colorScheme.error)
-        }
-        Spacer(Modifier.height(20.dp))
+        AuthError(error)
+        Spacer(Modifier.height(24.dp))
         // The backend enforces @Size(min = 8) on registration, so the button must not invite
         // a 6- or 7-character password only to fail with a 400 afterwards.
-        SubmitButton(
-            text = "Sign up",
-            busy = busy,
+        PillButton(
+            "Sign up",
+            onClick = { viewModel.signUp(email, password, name) {} },
+            modifier = Modifier.fillMaxWidth(),
+            variant = PillButtonVariant.Lime,
             enabled = email.contains("@") && password.length >= 8,
-            onClick = { viewModel.signUp(email, password, name) {} }
+            loading = busy
         )
         BusyHint(busy)
-        TextButton(
-            onClick = onLogin,
-            enabled = !busy,
-            modifier = Modifier.align(Alignment.CenterHorizontally)
-        ) {
-            Text("Already have an account")
+        Spacer(Modifier.height(8.dp))
+        TextButton(onClick = onLogin, enabled = !busy) {
+            Text("Already have an account", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -211,23 +221,50 @@ fun SignupScreen(
 fun OnboardingScreen(onFinished: (enableSms: Boolean, enableNotify: Boolean) -> Unit) {
     var sms by remember { mutableStateOf(false) }
     var notify by remember { mutableStateOf(true) }
-    Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center) {
-        Text("Welcome", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(8.dp))
-        Text("Permissions are optional. You can change them later in Settings.")
-        Spacer(Modifier.height(20.dp))
-        Text("SMS auto-capture reads bank alerts on this device, then parks them in a review queue. Nothing is uploaded until you confirm.")
-        Spacer(Modifier.height(12.dp))
-        OutlinedButton(onClick = { sms = !sms }, modifier = Modifier.fillMaxWidth()) {
-            Text(if (sms) "SMS capture: on" else "Enable SMS capture")
-        }
-        Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = { notify = !notify }, modifier = Modifier.fillMaxWidth()) {
-            Text(if (notify) "Notifications: on" else "Enable notifications")
-        }
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        BrandMark()
         Spacer(Modifier.height(24.dp))
-        Button(onClick = { onFinished(sms, notify) }, modifier = Modifier.fillMaxWidth()) {
-            Text("Continue to dashboard")
-        }
+        Text("Welcome", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onBackground)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Permissions are optional. You can change them later in Settings.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(24.dp))
+        Text(
+            "SMS auto-capture reads bank alerts on this device, then parks them in a review queue. Nothing is uploaded until you confirm.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(24.dp))
+        PillButton(
+            if (sms) "SMS capture: on" else "Enable SMS capture",
+            onClick = { sms = !sms },
+            modifier = Modifier.fillMaxWidth(),
+            variant = if (sms) PillButtonVariant.Lime else PillButtonVariant.Outlined
+        )
+        Spacer(Modifier.height(10.dp))
+        PillButton(
+            if (notify) "Notifications: on" else "Enable notifications",
+            onClick = { notify = !notify },
+            modifier = Modifier.fillMaxWidth(),
+            variant = if (notify) PillButtonVariant.Lime else PillButtonVariant.Outlined
+        )
+        Spacer(Modifier.height(24.dp))
+        PillButton(
+            "Continue to dashboard",
+            onClick = { onFinished(sms, notify) },
+            modifier = Modifier.fillMaxWidth(),
+            variant = PillButtonVariant.Lime
+        )
     }
 }

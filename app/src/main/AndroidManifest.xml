@@ -6,6 +6,12 @@
     <uses-permission android:name="android.permission.READ_SMS" />
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
 
+    <!-- SMS capture is an optional enhancement, so the app must stay installable on
+         telephony-less devices such as ChromeOS tablets. -->
+    <uses-feature
+        android:name="android.hardware.telephony"
+        android:required="false" />
+
     <application
         android:name=".MyFinanceApp"
         android:allowBackup="false"
