@@ -1,9 +1,11 @@
 package com.myfinancemanager.app.ui
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.myfinancemanager.app.data.local.StatementSource
+import com.myfinancemanager.app.data.importing.ImportUiBatch
+import com.myfinancemanager.app.data.importing.ImportUploadResult
 import com.myfinancemanager.app.data.local.entity.AutoCaptureEntity
 import com.myfinancemanager.app.data.local.entity.BudgetEntity
 import com.myfinancemanager.app.data.local.entity.ExpenseCategory
@@ -381,26 +383,67 @@ class AppViewModel(
     }
 
     /**
-     * Commits the reviewed rows in the ledger and keeps a private copy of the statement so the
-     * file itself can be mirrored to the backend on the next sync.
+     * Uploads a picked statement to the backend, which parses it with OpenRouter and stages the
+     * rows for review. The phone never parses a statement itself, and this call does not return
+     * until the parse is finished, so the result is one of: ready for review, failed server-side,
+     * cancelled, or queued (offline).
      */
-    fun commitImport(source: StatementSource, selected: List<ParsedTransaction>, onDone: (Int) -> Unit) {
-        val userId = uiState.value.session?.userId ?: return
+    suspend fun uploadStatement(uri: Uri, fileName: String): ImportUploadResult {
+        val userId = uiState.value.session?.userId ?: return ImportUploadResult.Failed("Not signed in")
+        val result = container.importManager.importPickedFile(userId, uri, fileName)
+        scheduleSync()
+        return result
+    }
+
+    /** The same server-side flow for statement text the app supplies (the bundled sample CSV). */
+    suspend fun uploadStatementContent(fileName: String, content: String): ImportUploadResult {
+        val userId = uiState.value.session?.userId ?: return ImportUploadResult.Failed("Not signed in")
+        val result = container.importManager.importContent(userId, fileName, content)
+        scheduleSync()
+        return result
+    }
+
+    /**
+     * Re-reads one batch's status from the server, so a parse left running when the import
+     * screen went away can be watched again when it comes back.
+     */
+    suspend fun refreshImport(batch: ImportBatchEntity): ImportBatchEntity? =
+        container.importManager.refreshStatus(batch)
+
+    /** Loads the staged rows the server parsed, for the review list. */
+    suspend fun stagedRows(batch: ImportBatchEntity): ImportUiBatch =
+        withContext(Dispatchers.IO) { container.importManager.loadDetail(batch) }
+
+    /**
+     * Sends the review decisions; the backend writes the records, which arrive on this device
+     * through the record pull of the sync scheduled by the caller on success.
+     */
+    suspend fun commitImport(batch: ImportBatchEntity, includedIds: Set<String>): Int {
+        val count = container.importManager.commit(batch, includedIds)
+        flash.value = "Imported $count transactions"
+        scheduleSync()
+        return count
+    }
+
+    /** Drops a batch (typically a failed parse) on the server and locally. */
+    fun discardImport(batch: ImportBatchEntity) {
         viewModelScope.launch {
-            val stored = withContext(Dispatchers.IO) { container.statementStore.save(userId, source) }
-            val batch = finance.commitImport(userId, source.fileName, stored, selected)
-            flash.value = buildString {
-                append("Imported ").append(batch.committed).append(" of ").append(batch.totalParsed).append(" records")
-                if (stored == null) append(" (the file could not be copied, so it was not backed up)")
-            }
+            container.importManager.discard(batch)
             scheduleSync()
-            onDone(batch.committed)
         }
     }
 
-    suspend fun isDuplicate(tx: ParsedTransaction): Boolean {
-        val userId = uiState.value.session?.userId ?: return false
-        return finance.isDuplicate(userId, tx)
+    /**
+     * Aborts the import that is in progress: the server cancels the batch and drops its staged
+     * rows, and the local row is kept in the history flagged cancelled.
+     *
+     * @return false when the server could not be reached, so the caller can leave the import
+     *         exactly as it was rather than claim a cancellation that did not happen.
+     */
+    suspend fun cancelImport(batch: ImportBatchEntity): Boolean {
+        val cancelled = container.importManager.cancel(batch)
+        if (cancelled) scheduleSync()
+        return cancelled
     }
 
     fun enqueueSms(sender: String, body: String, parsed: ParsedTransaction) {

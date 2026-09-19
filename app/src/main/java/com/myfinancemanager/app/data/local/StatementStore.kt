@@ -55,6 +55,12 @@ class StatementStore(private val context: Context) {
         directoryFor(userId).deleteRecursively()
     }
 
+    /** Removes one statement's private copy — used when its import is cancelled. */
+    fun delete(path: String?) {
+        if (path.isNullOrBlank()) return
+        runCatching { File(path).delete() }
+    }
+
     private fun directoryFor(userId: String): File = File(context.filesDir, "statements/$userId")
 
     /**

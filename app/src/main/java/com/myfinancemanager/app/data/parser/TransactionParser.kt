@@ -22,6 +22,13 @@ data class ParsedTransaction(
     val rawLine: String = ""
 )
 
+/**
+ * Parses bank notification SMSes into transactions for the auto-capture review queue.
+ *
+ * Statement files (PDF/CSV) are deliberately NOT parsed here any more: import runs on the
+ * backend (OpenRouter over the text it extracts) via [ImportManager], which also fixed the
+ * mis-parses the old on-device guesser produced.
+ */
 object TransactionParser {
     private val amountRegex = Regex(
         """(?:INR|Rs\.?|₹|USD|\$)\s*([0-9]+(?:,[0-9]{2,3})*(?:\.[0-9]{1,2})?)|([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)""",
@@ -42,7 +49,17 @@ object TransactionParser {
         RegexOption.IGNORE_CASE
     )
     private val dateRegex = Regex(
-        """(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})|(\d{1,2}\s+[A-Za-z]{3,9}\s+\d{2,4})"""
+        """(\d{4}[-/]\d{1,2}[-/]\d{1,2})|(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})|(\d{1,2}[- ][A-Za-z]{3,9}[- ]\d{2,4})|([A-Za-z]{3,9}\s+\d{1,2},?\s+\d{2,4})"""
+    )
+
+    /**
+     * Parse orders seen in real bank exports. ISO (`2026-09-12`) must come first so the
+     * day-first patterns never split an ISO date into `2026` + `09` + `12`.
+     */
+    private val datePatterns = listOf(
+        "yyyy-MM-dd", "yyyy/MM/dd", "dd-MMM-yyyy", "dd/MMM/yyyy", "dd MMM yyyy", "d MMM yyyy",
+        "dd-MMM-yy", "dd/MMM/yy", "MMM dd, yyyy", "MMM d, yyyy", "MMM dd yyyy",
+        "dd-MM-yyyy", "dd/MM/yyyy", "dd-MM-yy", "dd/MM/yy", "d/M/yyyy", "d-M-yyyy"
     )
 
     fun parseSms(sender: String, body: String, receivedAt: Long = Dates.now()): ParsedTransaction? {
@@ -63,60 +80,6 @@ object TransactionParser {
             notes = "Auto-detected from SMS ($sender)",
             rawLine = text
         )
-    }
-
-    fun parseCsvLine(headers: List<String>, values: List<String>): ParsedTransaction? {
-        val map = headers.map { it.trim().lowercase() }.zip(values.map { it.trim() }).toMap()
-        val amount = listOf("amount", "txn amount", "transaction amount", "debit", "credit", "value")
-            .firstNotNullOfOrNull { key -> map[key]?.let { extractAmount(it) } }
-            ?: values.firstNotNullOfOrNull { extractAmount(it) }
-            ?: return null
-        val desc = map["description"] ?: map["narration"] ?: map["particulars"]
-            ?: map["merchant"] ?: map["details"] ?: values.getOrNull(1).orEmpty()
-        val dateRaw = map["date"] ?: map["txn date"] ?: map["transaction date"] ?: values.firstOrNull().orEmpty()
-        val date = extractDate(dateRaw) ?: Dates.now()
-        val debit = map["debit"]?.let { extractAmount(it) }
-        val credit = map["credit"]?.let { extractAmount(it) }
-        val type = when {
-            credit != null && credit > 0 && (debit == null || debit == 0.0) -> ParsedType.INCOME
-            classify("", desc) == ParsedType.INVESTMENT -> ParsedType.INVESTMENT
-            else -> ParsedType.EXPENSE
-        }
-        val usedAmount = when (type) {
-            ParsedType.INCOME -> credit ?: amount
-            else -> debit ?: amount
-        }
-        return ParsedTransaction(
-            type = type,
-            amount = usedAmount,
-            party = desc.ifBlank { "Imported" },
-            date = date,
-            categoryHint = type.name,
-            paymentMode = inferPaymentMode(desc),
-            incomeCategory = inferIncomeCategory(desc),
-            expenseCategory = inferExpenseCategory(desc, desc),
-            notes = "Imported from statement",
-            rawLine = values.joinToString(",")
-        )
-    }
-
-    fun parseGenericTextLines(lines: List<String>): List<ParsedTransaction> {
-        return lines.mapNotNull { line ->
-            val amount = extractAmount(line) ?: return@mapNotNull null
-            val type = classify("", line)
-            ParsedTransaction(
-                type = type,
-                amount = amount,
-                party = extractParty(line) ?: line.take(40),
-                date = extractDate(line) ?: Dates.now(),
-                categoryHint = type.name,
-                paymentMode = inferPaymentMode(line),
-                incomeCategory = inferIncomeCategory(line),
-                expenseCategory = inferExpenseCategory(line, line),
-                notes = "Imported from statement",
-                rawLine = line
-            )
-        }
     }
 
     private fun classify(sender: String, text: String): ParsedType {
@@ -144,8 +107,7 @@ object TransactionParser {
 
     private fun extractDate(text: String): Long? {
         val raw = dateRegex.find(text)?.value ?: return null
-        val patterns = listOf("dd-MM-yyyy", "dd/MM/yyyy", "dd-MM-yy", "dd/MM/yy", "dd MMM yyyy", "d MMM yyyy")
-        for (p in patterns) {
+        for (p in datePatterns) {
             runCatching {
                 val parsed = LocalDate.parse(raw, DateTimeFormatter.ofPattern(p, Locale.ENGLISH))
                 return Dates.toEpoch(parsed)

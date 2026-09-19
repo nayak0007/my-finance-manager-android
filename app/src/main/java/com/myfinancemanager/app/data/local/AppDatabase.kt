@@ -41,7 +41,7 @@ import com.myfinancemanager.app.data.local.entity.UserEntity
         SenderRuleEntity::class,
         SyncTombstoneEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -128,13 +128,27 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v4 -> v5: statement imports become server-driven.
+         *
+         * The phone no longer parses statements; the backend does (OpenRouter over text it
+         * extracts itself). The row gains the parse error the server reports. Pre-existing batches
+         * were committed locally by their old build and never mirrored, so they keep their
+         * clean flag and history as-is.
+         */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE import_batches ADD COLUMN errorMessage TEXT")
+            }
+        }
+
         fun get(context: Context): AppDatabase {
             return instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
                     "my_finance_manager.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .fallbackToDestructiveMigration().build().also { instance = it }
             }
         }

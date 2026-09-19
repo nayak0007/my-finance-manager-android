@@ -1,9 +1,9 @@
 package com.myfinancemanager.app.di
 
 import android.content.Context
+import com.myfinancemanager.app.data.importing.ImportManager
 import com.myfinancemanager.app.data.local.AppDatabase
 import com.myfinancemanager.app.data.local.StatementStore
-import com.myfinancemanager.app.data.parser.StatementImporter
 import com.myfinancemanager.app.data.prefs.UserPreferences
 import com.myfinancemanager.app.data.remote.ApiClient
 import com.myfinancemanager.app.data.remote.FinanceApi
@@ -21,7 +21,6 @@ class AppContainer(context: Context) {
 
     val sessionStore = SessionStore(appContext)
     val userPreferences = UserPreferences(appContext)
-    val statementImporter = StatementImporter(appContext)
 
     /** Private copies of imported statements, kept so their upload can be retried. */
     val statementStore = StatementStore(appContext)
@@ -63,6 +62,12 @@ class AppContainer(context: Context) {
      * settings and insights.
      */
     val syncEngine = SyncEngine(financeApi, db, userPreferences)
+
+    /**
+     * Statement imports run server-side: this uploads the file and drives the review/commit
+     * flow against the parsed rows the backend stages.
+     */
+    val importManager = ImportManager(financeApi, db.importBatchDao(), statementStore)
 
     val financeRepository = FinanceRepository(
         incomeDao = db.incomeDao(),

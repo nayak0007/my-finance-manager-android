@@ -685,8 +685,9 @@ class SyncEngine(
     // ---- Step 5: statement imports ------------------------------------------------------
 
     /**
-     * Uploads the private copy of every statement the user imported while offline or before this
-     * build could reach the backend.
+     * Uploads the private copy of every statement whose upload did not finish — a pick taken
+     * offline, or one the in-app flow could not complete. The import screen handles the normal
+     * path; this is the retry that makes the queue drain without user action.
      */
     private suspend fun pushImports(userId: String, tally: Tally) {
         importDao.pendingSync(userId).forEach { batch ->
@@ -741,12 +742,23 @@ class SyncEngine(
     }
 
     /**
-     * Mirrors the server's statement history. A batch this device created is left exactly as it
-     * is: `committed`/`totalParsed` record what the user actually reviewed here, and the server's
-     * copy of the same upload only reports what *it* parsed from the file.
+     * Mirrors the server's statement history — including batches uploaded from another device
+     * or the final states of this device's uploads that arrived after the in-app poll gave up.
      */
     private suspend fun mergeImport(userId: String, remote: RemoteImportBatch): Boolean {
-        if (importDao.findByRemoteId(remote.id) != null) return false
+        val existing = importDao.findByRemoteId(remote.id)
+        if (existing != null) {
+            if (existing.dirty) return false
+            val status = remote.status?.lowercase()?.ifBlank { existing.status } ?: existing.status
+            val updated = existing.copy(
+                status = status,
+                totalParsed = remote.totalTransactions,
+                errorMessage = remote.errorMessage
+            )
+            if (updated == existing) return false
+            importDao.update(updated)
+            return true
+        }
         val status = remote.status.orEmpty()
         importDao.insert(
             ImportBatchEntity(
@@ -758,7 +770,8 @@ class SyncEngine(
                 committed = if (status.equals("COMMITTED", ignoreCase = true)) remote.totalTransactions else 0,
                 createdAt = parseInstant(remote.createdAt) ?: Dates.now(),
                 remoteId = remote.id,
-                dirty = false
+                dirty = false,
+                errorMessage = remote.errorMessage
             )
         )
         return true

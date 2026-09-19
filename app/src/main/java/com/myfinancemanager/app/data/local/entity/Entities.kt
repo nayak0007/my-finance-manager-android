@@ -163,6 +163,7 @@ data class ImportBatchEntity(
     @PrimaryKey val id: String,
     val userId: String,
     val sourceFile: String,
+    /** A backend ImportStatus name, lowercased (queued/processing/ready_for_review/failed…). */
     val status: String,
     val totalParsed: Int,
     val committed: Int,
@@ -176,7 +177,9 @@ data class ImportBatchEntity(
     val fileSize: Long = 0,
     /** True while the statement file still has to be uploaded to the backend. */
     @ColumnInfo(defaultValue = "1")
-    val dirty: Boolean = true
+    val dirty: Boolean = true,
+    /** Why a parse failed, as the backend reported it. */
+    val errorMessage: String? = null
 )
 
 /**

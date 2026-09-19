@@ -9,7 +9,6 @@ import com.myfinancemanager.app.data.local.dao.InsightDao
 import com.myfinancemanager.app.data.local.dao.InvestmentDao
 import com.myfinancemanager.app.data.local.dao.SenderRuleDao
 import com.myfinancemanager.app.data.local.dao.SyncDao
-import com.myfinancemanager.app.data.local.StoredStatement
 import com.myfinancemanager.app.data.local.entity.AutoCaptureEntity
 import com.myfinancemanager.app.data.local.entity.AutoCaptureStatus
 import com.myfinancemanager.app.data.local.entity.BudgetEntity
@@ -261,57 +260,6 @@ class FinanceRepository(
 
     suspend fun rejectCapture(item: AutoCaptureEntity) {
         autoCaptureDao.update(item.copy(status = AutoCaptureStatus.REJECTED, dirty = true))
-    }
-
-    suspend fun commitImport(
-        userId: String,
-        fileName: String,
-        storedStatement: StoredStatement?,
-        selected: List<ParsedTransaction>
-    ): ImportBatchEntity {
-        var committed = 0
-        selected.forEach { tx ->
-            val origin = RecordOrigin.IMPORT
-            val ok = when (tx.type) {
-                ParsedType.INCOME -> addIncome(
-                    userId, tx.amount, tx.party, tx.incomeCategory, tx.date, tx.notes, false, origin
-                )
-                ParsedType.EXPENSE -> addExpense(
-                    userId, tx.amount, tx.party, tx.expenseCategory, tx.paymentMode, tx.date, tx.notes, false, origin
-                )
-                ParsedType.INVESTMENT -> addInvestment(
-                    userId, tx.party, InvestmentType.OTHER, tx.amount, tx.amount, tx.date, "", tx.notes, origin
-                )
-            }
-            if (ok.isSuccess) committed++
-        }
-        val batch = ImportBatchEntity(
-            id = Ids.new(),
-            userId = userId,
-            sourceFile = fileName,
-            status = "committed",
-            totalParsed = selected.size,
-            committed = committed,
-            createdAt = Dates.now(),
-            localPath = storedStatement?.path,
-            contentType = storedStatement?.contentType,
-            fileSize = storedStatement?.size ?: 0,
-            // Uploaded on the next sync so the statement itself is backed up on the server. The
-            // backend's own parse is never committed: the records above are already on their way
-            // there, and committing would create a second copy of every transaction.
-            dirty = storedStatement != null
-        )
-        importBatchDao.insert(batch)
-        return batch
-    }
-
-    suspend fun isDuplicate(userId: String, tx: ParsedTransaction): Boolean {
-        val incomeFp = Ids.fingerprint(listOf(userId, "income", tx.amount.toString(), tx.party, tx.date.toString()))
-        val expenseFp = Ids.fingerprint(listOf(userId, "expense", tx.amount.toString(), tx.party, tx.date.toString()))
-        val invFp = Ids.fingerprint(listOf(userId, "investment", tx.party, tx.amount.toString(), tx.date.toString()))
-        return incomeDao.countFingerprint(incomeFp) > 0 ||
-            expenseDao.countFingerprint(expenseFp) > 0 ||
-            investmentDao.countFingerprint(invFp) > 0
     }
 
     /** Leaves the row dirty so the limit is pushed on the next sync. */

@@ -6,6 +6,9 @@ import com.myfinancemanager.app.data.remote.AutoCaptureBody
 import com.myfinancemanager.app.data.remote.AutoCaptureReviewBody
 import com.myfinancemanager.app.data.remote.BudgetUpsertBody
 import com.myfinancemanager.app.data.remote.CaptureSettingsBody
+import com.myfinancemanager.app.data.remote.ImportCommitBody
+import com.myfinancemanager.app.data.remote.ImportCommitItem
+import com.myfinancemanager.app.data.remote.RemoteImportBatchDetail
 import com.myfinancemanager.app.data.remote.InsightStatusBody
 import com.myfinancemanager.app.data.remote.PageDto
 import com.myfinancemanager.app.data.remote.RemoteAutoCapture
@@ -335,6 +338,89 @@ class RemoteApiTest {
         assertEquals("QUEUED", batch.status)
         assertEquals(0, batch.totalTransactions)
         assertNull(batch.errorMessage)
+    }
+
+    @Test
+    fun `import detail maps the staged rows for review`() {
+        // GET /api/v1/imports/{id}/detail -> ImportBatchDetailResponse. The parse has finished,
+        // so the batch is READY_FOR_REVIEW and the staged rows carry the server's decisions.
+        val json = """
+            {
+              "batch": {
+                "id": "12345678-abcd-4321-abcd-1234567890ab",
+                "fileName": "hdfc_sept.pdf",
+                "contentType": "application/pdf",
+                "fileSize": 88321,
+                "status": "READY_FOR_REVIEW",
+                "extractionMethod": "RAPID_API",
+                "totalTransactions": 2,
+                "createdAt": "2026-09-15T09:30:00Z",
+                "updatedAt": "2026-09-15T09:30:42Z"
+              },
+              "transactions": [
+                {
+                  "id": "dddddddd-1111-2222-3333-444444444444",
+                  "transactionType": "EXPENSE",
+                  "transactionDate": "2026-09-02",
+                  "description": "UBER INDIA SYSTEMS",
+                  "merchant": "UBER INDIA SYSTEMS",
+                  "amount": 320.50,
+                  "category": "travel",
+                  "paymentMode": "CARD",
+                  "source": "HDFC BANK",
+                  "status": "PENDING",
+                  "duplicate": false,
+                  "confidence": 0.97
+                },
+                {
+                  "id": "dddddddd-5555-6666-7777-888888888888",
+                  "transactionType": "INCOME",
+                  "transactionDate": "2026-09-01",
+                  "description": "SALARY SEPT",
+                  "amount": 85000.0,
+                  "status": "PENDING",
+                  "duplicate": true,
+                  "duplicateOfId": "cccccccc-9999-0000-1111-222222222222"
+                }
+              ]
+            }
+        """.trimIndent()
+
+        val detail = moshi.adapter(RemoteImportBatchDetail::class.java).fromJson(json)!!
+
+        assertEquals("READY_FOR_REVIEW", detail.batch!!.status)
+        assertEquals("RAPID_API", detail.batch!!.extractionMethod)
+        assertEquals(2, detail.transactions.size)
+        val first = detail.transactions.first()
+        assertEquals("EXPENSE", first.transactionType)
+        assertEquals(320.50, first.amount, 0.0)
+        assertEquals("CARD", first.paymentMode)
+        assertEquals(false, first.duplicate)
+        val second = detail.transactions.last()
+        assertTrue(second.duplicate)
+        assertEquals("cccccccc-9999-0000-1111-222222222222", second.duplicateOfId)
+    }
+
+    @Test
+    fun `commit body sends include decisions with the staged ids`() {
+        // POST /api/v1/imports/{id}/commit -> CommitImportRequest. Rows absent from `items` are
+        // left untouched, so every reviewed row is listed, excluded ones with include=false.
+        val body = ImportCommitBody(
+            items = listOf(
+                ImportCommitItem(id = "dddddddd-1111-2222-3333-444444444444", include = true),
+                ImportCommitItem(id = "dddddddd-5555-6666-7777-888888888888", include = false)
+            )
+        )
+
+        val json = moshi.adapter(ImportCommitBody::class.java).toJson(body)
+
+        assertTrue(json.contains("\"items\":[{"))
+        assertTrue(json.contains("\"id\":\"dddddddd-1111-2222-3333-444444444444\""))
+        assertTrue(json.contains("\"include\":true"))
+        assertTrue(json.contains("\"include\":false"))
+        // No overrides were set, so the optional correction fields must not appear.
+        assertTrue(!json.contains("amount"))
+        assertTrue(!json.contains("category"))
     }
 
     @Test

@@ -39,10 +39,13 @@ object Ids {
 
 object Dates {
     private val zone: ZoneId = ZoneId.systemDefault()
-    private val dayFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("dd MMM yyyy")
-    private val monthFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("MMM yyyy")
-    private val shortFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("dd MMM")
-    private val dateTimeFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm")
+    // Locale pinned: newer CLDR data (e.g. en-IN) renders September as "Sept", so an
+    // unpinned formatter makes output device/JVM dependent.
+    private val locale: Locale = Locale.ENGLISH
+    private val dayFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("dd MMM yyyy", locale)
+    private val monthFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("MMM yyyy", locale)
+    private val shortFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("dd MMM", locale)
+    private val dateTimeFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm", locale)
 
     fun now(): Long = System.currentTimeMillis()
 
@@ -64,6 +67,10 @@ object Dates {
 
     fun format(epoch: Long): String = toLocalDate(epoch).format(dayFmt)
     fun formatShort(epoch: Long): String = toLocalDate(epoch).format(shortFmt)
+
+    /** Formats an ISO date string ("2026-09-12") as the backend sends it; null when unparseable. */
+    fun formatIso(value: String?): String? =
+        value?.let { runCatching { LocalDate.parse(it).format(dayFmt) }.getOrNull() }
     fun formatMonth(yearMonth: YearMonth): String = yearMonth.format(monthFmt)
 
     /** Date and wall-clock time, used for "last synced" readouts. */

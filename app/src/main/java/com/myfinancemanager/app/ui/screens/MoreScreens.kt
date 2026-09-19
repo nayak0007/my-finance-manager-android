@@ -1,6 +1,8 @@
 package com.myfinancemanager.app.ui.screens
 
+import android.content.Context
 import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -53,8 +55,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.myfinancemanager.app.MyFinanceApp
-import com.myfinancemanager.app.data.local.StatementSource
+import com.myfinancemanager.app.data.importing.ImportUploadResult
 import com.myfinancemanager.app.data.local.entity.AutoCaptureEntity
 import com.myfinancemanager.app.data.local.entity.BudgetEntity
 import com.myfinancemanager.app.data.local.entity.ExpenseCategory
@@ -63,10 +64,10 @@ import com.myfinancemanager.app.data.local.entity.ImportBatchEntity
 import com.myfinancemanager.app.data.local.entity.InsightEntity
 import com.myfinancemanager.app.data.local.entity.ParsedType
 import com.myfinancemanager.app.data.local.entity.SenderRuleEntity
-import com.myfinancemanager.app.data.parser.ParsedTransaction
 import com.myfinancemanager.app.data.prefs.AppPreferences
 import com.myfinancemanager.app.data.remote.ApiConfig
 import com.myfinancemanager.app.data.remote.NeonAuthConfig
+import com.myfinancemanager.app.data.remote.RemoteImportedTransaction
 import com.myfinancemanager.app.sms.InboxScanner
 import com.myfinancemanager.app.ui.AppViewModel
 import com.myfinancemanager.app.ui.SyncSnapshot
@@ -90,7 +91,9 @@ import com.myfinancemanager.app.ui.theme.TextSecondaryDark
 import com.myfinancemanager.app.util.Dates
 import com.myfinancemanager.app.util.Money
 import com.myfinancemanager.app.util.titleCase
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.YearMonth
@@ -185,27 +188,102 @@ fun ImportScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var source by remember { mutableStateOf<StatementSource?>(null) }
-    var parsed by remember { mutableStateOf<List<ParsedTransaction>>(emptyList()) }
-    var loading by remember { mutableStateOf(false) }
-    val excluded = remember { mutableStateMapOf<Int, Boolean>() }
-    val duplicates = remember { mutableStateMapOf<Int, Boolean>() }
+
+    // One import at a time. This is read from the batch list rather than kept in local state, so
+    // the same import is still waiting when the user comes back to the screen, and a second
+    // statement cannot be picked until this one is committed or cancelled.
+    val active = batches.firstOrNull { it.status.lowercase() in ACTIVE_IMPORT_STATUSES }
+    val parsing = active != null && active.status.lowercase() in PARSING_IMPORT_STATUSES
+    val reviewBatch = active?.takeIf { it.status.equals("ready_for_review", ignoreCase = true) }
+
+    var uploadInFlight by remember { mutableStateOf(false) }
+    var committing by remember { mutableStateOf(false) }
+    var cancelling by remember { mutableStateOf(false) }
+    var statusLine by remember { mutableStateOf<String?>(null) }
+    var rows by remember { mutableStateOf<List<RemoteImportedTransaction>>(emptyList()) }
+    var rowsForBatch by remember { mutableStateOf<String?>(null) }
+    val excluded = remember { mutableStateMapOf<String, Boolean>() } // staged row id -> excluded
+
+    // Nothing else can be started while an import owns the screen.
+    val locked = active != null || uploadInFlight || committing || cancelling
+
+    fun startImport(block: suspend () -> ImportUploadResult) {
+        statusLine = null
+        uploadInFlight = true
+        scope.launch {
+            try {
+                when (val result = block()) {
+                    is ImportUploadResult.Failed -> statusLine = result.reason
+                    is ImportUploadResult.Queued -> statusLine =
+                        "Saved for upload — it will be parsed once your device is back online."
+                    ImportUploadResult.Cancelled -> statusLine = "Import cancelled."
+                    is ImportUploadResult.Ready -> Unit // the review follows from the batch state
+                }
+            } finally {
+                uploadInFlight = false
+            }
+        }
+    }
+
+    fun cancelActive() {
+        val batch = active ?: return
+        statusLine = null
+        cancelling = true
+        scope.launch {
+            val cancelled = viewModel.cancelImport(batch)
+            cancelling = false
+            if (!cancelled) {
+                statusLine = "Could not cancel the import — check your connection and try again."
+            }
+        }
+    }
+
+    // The staged rows live on the server, so they are fetched once the parse reaches review —
+    // including when the review is resumed rather than reached straight from an upload.
+    LaunchedEffect(active?.id, active?.status) {
+        val batch = active
+        if (batch == null) {
+            rowsForBatch = null
+            rows = emptyList()
+            excluded.clear()
+        } else if (batch.status.equals("ready_for_review", ignoreCase = true) &&
+            batch.remoteId != null && rowsForBatch != batch.id
+        ) {
+            rowsForBatch = batch.id
+            excluded.clear()
+            rows = runCatching { viewModel.stagedRows(batch).transactions }.getOrDefault(emptyList())
+        }
+    }
+
+    // A parse that was still running when the screen was left has no coroutine watching it any
+    // more, so watching resumes here: the spinner has to follow the server, not a stale local row.
+    LaunchedEffect(active?.id, active?.status, uploadInFlight) {
+        val batch = active ?: return@LaunchedEffect
+        if (uploadInFlight || batch.remoteId == null ||
+            batch.status.lowercase() !in PARSING_IMPORT_STATUSES
+        ) {
+            return@LaunchedEffect
+        }
+        while (true) {
+            delay(RESUME_POLL_INTERVAL_MS)
+            val refreshed = try {
+                viewModel.refreshImport(batch)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            } ?: continue
+            if (refreshed.status.lowercase() !in PARSING_IMPORT_STATUSES) break
+        }
+    }
+
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
-        val name = uri.lastPathSegment?.substringAfterLast('/') ?: "statement"
-        source = StatementSource.Picked(uri, name)
-        loading = true
-        scope.launch {
-            val rows = withContext(Dispatchers.IO) {
-                MyFinanceApp.instance.container.statementImporter.parse(uri, name)
-            }
-            parsed = rows
-            rows.forEachIndexed { index, tx ->
-                duplicates[index] = viewModel.isDuplicate(tx)
-                if (duplicates[index] == true) excluded[index] = true
-            }
-            loading = false
-        }
+        // Resolve the display name ("statement.pdf") through the provider; the Uri's own path
+        // is usually an opaque document id ("document:33") with no extension, and the backend
+        // routes its parser by that extension.
+        val name = queryDisplayName(context, uri) ?: uri.lastPathSegment?.substringAfterLast('/') ?: "statement.pdf"
+        startImport { viewModel.uploadStatement(uri, name) }
     }
     Scaffold(
         containerColor = Ink900,
@@ -218,7 +296,7 @@ fun ImportScreen(
                 .verticalScroll(rememberScrollState())
         ) {
             Text(
-                "Upload a bank, card, or broker statement (CSV, TXT, or PDF text). Review every line before it is saved.",
+                "Upload a bank, card, or broker statement (PDF, CSV, or XLSX). It is parsed on the server; review every row before it is saved.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -227,33 +305,28 @@ fun ImportScreen(
                 "Choose statement file",
                 onClick = { picker.launch(arrayOf("*/*")) },
                 modifier = Modifier.fillMaxWidth(),
-                variant = PillButtonVariant.Lime
+                variant = PillButtonVariant.Lime,
+                enabled = !locked
             )
             Spacer(Modifier.height(8.dp))
             PillButton(
                 "Load sample statement",
                 onClick = {
-                    loading = true
-                    scope.launch {
+                    startImport {
                         val text = withContext(Dispatchers.IO) {
                             context.assets.open("sample_statement.csv").bufferedReader().readText()
                         }
-                        val rows = withContext(Dispatchers.IO) {
-                            MyFinanceApp.instance.container.statementImporter.parseContent(text, "sample_statement.csv")
-                        }
-                        source = StatementSource.Inline("sample_statement.csv", text)
-                        parsed = rows
-                        rows.forEachIndexed { index, tx ->
-                            duplicates[index] = viewModel.isDuplicate(tx)
-                            if (duplicates[index] == true) excluded[index] = true
-                        }
-                        loading = false
+                        viewModel.uploadStatementContent("sample_statement.csv", text)
                     }
                 },
+                enabled = !locked,
                 modifier = Modifier.fillMaxWidth(),
                 variant = PillButtonVariant.Outlined
             )
-            if (loading) {
+
+            // The spinner stays up for as long as the import is unfinished — there is no attempt
+            // budget — and it can be ended from here at any point.
+            if (parsing || uploadInFlight) {
                 Spacer(Modifier.height(16.dp))
                 LinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)),
@@ -261,30 +334,47 @@ fun ImportScreen(
                     trackColor = MaterialTheme.colorScheme.surfaceContainerHigh
                 )
                 Spacer(Modifier.height(6.dp))
-                Text("Parsing file", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            source?.fileName?.let {
+                Text(
+                    if (cancelling) "Cancelling the import…"
+                    else "Uploading and parsing on the server. This can take a minute, and it keeps going until it finishes.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 Spacer(Modifier.height(12.dp))
-                Text("File: $it", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onBackground)
+                PillButton(
+                    "Cancel import",
+                    onClick = { cancelActive() },
+                    modifier = Modifier.fillMaxWidth(),
+                    variant = PillButtonVariant.Outlined,
+                    enabled = !cancelling
+                )
             }
-            if (parsed.isNotEmpty()) {
+            statusLine?.let {
+                Spacer(Modifier.height(12.dp))
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            }
+
+            // Review: the rows the server staged, with the user's include/exclude decisions.
+            if (reviewBatch != null) {
+                val batch = reviewBatch
+                val includeCount = rows.count { excluded[it.id] != true }
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    "${parsed.size} rows parsed. Uncheck duplicates or junk before commit.",
+                    "$includeCount of ${rows.size} rows will be imported. Uncheck duplicates or junk.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 Spacer(Modifier.height(8.dp))
                 SettingsCard {
-                    parsed.forEachIndexed { index, tx ->
-                        val skip = excluded[index] == true
+                    rows.forEachIndexed { index, row ->
+                        val skip = excluded[row.id] == true
                         Row(
                             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Checkbox(
                                 checked = !skip,
-                                onCheckedChange = { excluded[index] = !it },
+                                onCheckedChange = { excluded[row.id] = !it },
                                 colors = CheckboxDefaults.colors(
                                     checkedColor = AxioLime,
                                     uncheckedColor = TextSecondaryDark,
@@ -294,39 +384,69 @@ fun ImportScreen(
                             Spacer(Modifier.width(8.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(
-                                    "${tx.party} · ${tx.type.name.titleCase()}",
+                                    "${row.merchant ?: row.description ?: "Unknown"} · ${row.transactionType?.titleCase() ?: "Unknown type"}",
                                     style = MaterialTheme.typography.bodyLarge,
                                     color = MaterialTheme.colorScheme.onBackground
                                 )
                                 Text(
-                                    "${Money.format(tx.amount)} · ${Dates.format(tx.date)}${if (duplicates[index] == true) " · duplicate" else ""}",
+                                    buildString {
+                                        append(Money.format(row.amount))
+                                        Dates.formatIso(row.transactionDate)?.let { append(" · ").append(it) }
+                                        if (row.duplicate) append(" · duplicate")
+                                    },
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
-                        if (index != parsed.lastIndex) CardDivider()
+                        if (index != rows.lastIndex) CardDivider()
                     }
                 }
                 Spacer(Modifier.height(16.dp))
                 PillButton(
-                    "Confirm import",
+                    if (committing) "Importing…" else "Confirm import",
                     onClick = {
-                        val selected = parsed.filterIndexed { i, _ -> excluded[i] != true }
-                        source?.let { viewModel.commitImport(it, selected) { onBack() } }
+                        statusLine = null
+                        committing = true
+                        scope.launch {
+                            val included = rows.filter { excluded[it.id] != true }.map { it.id }.toSet()
+                            try {
+                                viewModel.commitImport(batch, included)
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                statusLine = e.message ?: "Commit failed"
+                            } finally {
+                                committing = false
+                            }
+                        }
                     },
                     modifier = Modifier.fillMaxWidth(),
                     variant = PillButtonVariant.Lime,
-                    enabled = source != null
+                    enabled = includeCount > 0 && !committing && !cancelling
+                )
+                Spacer(Modifier.height(8.dp))
+                PillButton(
+                    "Cancel import",
+                    onClick = { cancelActive() },
+                    modifier = Modifier.fillMaxWidth(),
+                    variant = PillButtonVariant.Outlined,
+                    enabled = !committing && !cancelling
                 )
             }
+
             SectionTitle("Recent imports")
             if (batches.isEmpty()) {
                 Text("No imports yet.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            batches.take(8).forEach {
+            batches.take(8).forEach { batch ->
+                val label = when {
+                    batch.status.equals("failed", true) -> batch.errorMessage ?: "failed"
+                    batch.status.equals("cancelled", true) -> "cancelled"
+                    else -> "${batch.committed}/${batch.totalParsed}"
+                }
                 Text(
-                    "${it.sourceFile} · ${it.committed}/${it.totalParsed} · ${Dates.format(it.createdAt)}",
+                    "${batch.sourceFile} · $label · ${Dates.format(batch.createdAt)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(vertical = 4.dp)
@@ -336,6 +456,18 @@ fun ImportScreen(
         }
     }
 }
+
+/**
+ * Batch statuses that mean "this import still owns the screen". Everything else — committed,
+ * cancelled, failed — has finished, which is what frees the picker for the next statement.
+ */
+private val ACTIVE_IMPORT_STATUSES = setOf("queued", "processing", "ready_for_review")
+
+/** The statuses during which the parse is still running and the spinner belongs on screen. */
+private val PARSING_IMPORT_STATUSES = setOf("queued", "processing")
+
+/** How often a resumed import screen re-checks a parse the server is still running. */
+private const val RESUME_POLL_INTERVAL_MS = 2_000L
 
 // ---------------------------------------------------------------------------------------------
 // Review queue
@@ -520,6 +652,18 @@ fun InsightsScreen(
         Spacer(Modifier.height(24.dp))
     }
 }
+
+/**
+ * Resolves the picked document's real file name (e.g. "hdfc-statement.pdf") from the
+ * ContentResolver. Returns null when the provider does not expose it, letting the caller
+ * fall back to the Uri's path segment.
+ */
+private fun queryDisplayName(context: Context, uri: Uri): String? = runCatching {
+    context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+        val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+        if (index >= 0 && cursor.moveToFirst()) cursor.getString(index)?.takeIf { it.isNotBlank() } else null
+    }
+}.getOrNull()
 
 // ---------------------------------------------------------------------------------------------
 // Settings

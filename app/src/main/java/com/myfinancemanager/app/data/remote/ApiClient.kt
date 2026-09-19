@@ -211,8 +211,8 @@ data class AutoCaptureReviewBody(
 
 /**
  * Statement import batch (backend: com.myfinancemanager.dto.imports.ImportBatchResponse).
- * `status` is an ImportStatus name; the server re-parses the uploaded file in the background,
- * hence the initial 202 with status QUEUED.
+ * `status` is an ImportStatus name; the server parses the uploaded file in the background
+ * (OpenRouter over text extracted on the server), hence the initial 202 with status QUEUED.
  */
 data class RemoteImportBatch(
     val id: String,
@@ -225,6 +225,56 @@ data class RemoteImportBatch(
     val errorMessage: String? = null,
     val createdAt: String? = null,
     val updatedAt: String? = null
+)
+
+/**
+ * A staged transaction the server's parser found in an uploaded statement
+ * (backend: com.myfinancemanager.dto.imports.ImportedTransactionResponse).
+ */
+data class RemoteImportedTransaction(
+    val id: String,
+    val transactionType: String? = null,
+    val transactionDate: String? = null,
+    val description: String? = null,
+    val merchant: String? = null,
+    val amount: Double = 0.0,
+    val category: String? = null,
+    val paymentMode: String? = null,
+    val source: String? = null,
+    val status: String? = null,
+    val duplicate: Boolean = false,
+    val duplicateOfId: String? = null,
+    val confidence: Double? = null,
+    val rawLine: String? = null,
+    val committedRecordId: String? = null
+)
+
+/**
+ * GET /api/v1/imports/{id}/detail (backend: com.myfinancemanager.dto.imports.
+ * ImportBatchDetailResponse) — the batch plus the rows waiting for review.
+ */
+data class RemoteImportBatchDetail(
+    val batch: RemoteImportBatch? = null,
+    val transactions: List<RemoteImportedTransaction> = emptyList()
+)
+
+/**
+ * Body for POST /api/v1/imports/{id}/commit. Only staged rows listed here are written, each
+ * either as-is (`include = true`) or with the corrections the review screen gathered.
+ */
+data class ImportCommitBody(val items: List<ImportCommitItem> = emptyList())
+
+data class ImportCommitItem(
+    val id: String,
+    val include: Boolean,
+    val transactionType: String? = null,
+    val transactionDate: String? = null,
+    val description: String? = null,
+    val merchant: String? = null,
+    val amount: Double? = null,
+    val category: String? = null,
+    val paymentMode: String? = null,
+    val source: String? = null
 )
 
 data class UpdateProfileBody(
@@ -386,6 +436,32 @@ interface FinanceApi {
 
     @GET("api/v1/imports")
     suspend fun listImports(@Query("page") page: Int, @Query("size") size: Int): PageDto<RemoteImportBatch>
+
+    /** Status probe used while waiting for the server-side parse to finish. */
+    @GET("api/v1/imports/{id}")
+    suspend fun getImport(@Path("id") id: String): RemoteImportBatch
+
+    /** The staged rows for review, available once the batch is READY_FOR_REVIEW. */
+    @GET("api/v1/imports/{id}/detail")
+    suspend fun getImportDetail(@Path("id") id: String): RemoteImportBatchDetail
+
+    /**
+     * Writes the reviewed rows into the account's records. The backend owns the write, and the
+     * new records arrive on this device through the normal record pull.
+     */
+    @POST("api/v1/imports/{id}/commit")
+    suspend fun commitImport(@Path("id") id: String, @Body body: ImportCommitBody): RemoteImportBatch
+
+    /**
+     * Aborts an import the server is still parsing. The batch is marked CANCELLED and stays in
+     * the history, but its staged rows are dropped and the in-flight parse discards its result.
+     */
+    @POST("api/v1/imports/{id}/cancel")
+    suspend fun cancelImport(@Path("id") id: String): RemoteImportBatch
+
+    /** Drops a batch and its staged rows server-side (for example a failed parse). */
+    @DELETE("api/v1/imports/{id}")
+    suspend fun deleteImport(@Path("id") id: String): Response<Unit>
 
     // ---- Budgets ---------------------------------------------------------------------
 

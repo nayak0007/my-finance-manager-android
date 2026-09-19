@@ -207,11 +207,17 @@ interface ImportBatchDao {
     @Query("SELECT * FROM import_batches WHERE userId = :userId ORDER BY createdAt DESC")
     fun observe(userId: String): Flow<List<ImportBatchEntity>>
 
+    @Query("SELECT * FROM import_batches WHERE id = :id LIMIT 1")
+    suspend fun findById(id: String): ImportBatchEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(batch: ImportBatchEntity)
 
     @Update
     suspend fun update(batch: ImportBatchEntity)
+
+    @Query("DELETE FROM import_batches WHERE id = :id")
+    suspend fun delete(id: String)
 
     @Query("DELETE FROM import_batches WHERE userId = :userId")
     suspend fun deleteForUser(userId: String)
